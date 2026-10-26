@@ -1103,3 +1103,61 @@ button {
     display: none;
   }
 }
+
+/* ── dividers between charts ────────────────────────────────────────────── */
+
+.layout-grid {
+  position: relative;
+}
+.splitter {
+  position: absolute;
+  z-index: 8;
+  touch-action: none;
+}
+.splitter.col {
+  width: 8px;
+  margin-left: -2px;
+  cursor: col-resize;
+}
+.splitter.row {
+  height: 8px;
+  margin-top: -2px;
+  cursor: row-resize;
+}
+.splitter::after {
+  content: '';
+  position: absolute;
+  background: transparent;
+  transition: background 0.1s;
+}
+.splitter.col::after {
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 4px;
+}
+.splitter.row::after {
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 4px;
+}
+.splitter:hover::after,
+.splitter.active::after {
+  background: rgba(41, 98, 255, 0.55);
+}
+/* Keep the resize cursor and keep the charts from reacting while a divider is dragged. */
+.layout-grid.resizing-col,
+.layout-grid.resizing-row {
+  user-select: none;
+}
+.layout-grid.resizing-col .layout-cell,
+.layout-grid.resizing-row .layout-cell {
+  pointer-events: none;
+}
+.layout-grid.resizing-col {
+  cursor: col-resize;
+}
+.layout-grid.resizing-row {
+  cursor: row-resize;
+}

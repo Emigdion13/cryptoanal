@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import type { ChartType, CursorMode, PriceMode } from '../chart/ChartEngine'
 import { createInstance } from '../indicators/catalog'
 import type { IndicatorInstance } from '../indicators/types'
+import type { SplitSizes } from './LayoutGrid'
 
 /** One chart of the layout. */
 export interface ChartState {
@@ -22,6 +23,8 @@ export interface SyncOptions {
 
 export interface Settings {
   layout: string
+  /** Divider positions per layout, from dragging the borders between charts. */
+  splits: Record<string, SplitSizes>
   /** Every chart ever opened in a layout; the layout shows the first few. */
   charts: ChartState[]
   active: number
@@ -50,6 +53,7 @@ export function newChart(from?: Partial<ChartState>): ChartState {
 function defaults(): Settings {
   return {
     layout: '1',
+    splits: {},
     charts: [newChart()],
     active: 0,
     sync: { symbol: false, interval: false, crosshair: true, time: false },

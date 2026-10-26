@@ -13,6 +13,7 @@ import { Header } from './ui/Header'
 import { IndicatorSettings } from './ui/IndicatorSettings'
 import { IndicatorsDialog } from './ui/IndicatorsDialog'
 import { IntervalDialog } from './ui/IntervalDialog'
+import { LayoutGrid, sizesFor } from './ui/LayoutGrid'
 import { LAYOUT_BY_ID, LAYOUTS } from './ui/layouts'
 import { newChart, useSettings, type ChartState } from './ui/settings'
 import { LeftToolbar, RightToolbar } from './ui/Sidebars'
@@ -224,12 +225,10 @@ export function App() {
       />
       <LeftToolbar cursor={settings.cursor} onCursor={(cursor) => update({ cursor })} />
       <main className="center">
-        <div
-          className="layout-grid"
-          style={{
-            gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
-            gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`,
-          }}
+        <LayoutGrid
+          layout={layout}
+          sizes={sizesFor(layout, settings.splits[layout.id])}
+          onSizes={(sizes) => update((s) => ({ splits: { ...s.splits, [layout.id]: sizes } }))}
         >
           {layout.cells.map((cell, i) => (
             <div
@@ -262,7 +261,7 @@ export function App() {
               />
             </div>
           ))}
-        </div>
+        </LayoutGrid>
         <BottomBar
           priceMode={chart.priceMode}
           autoScale={autoScales[active] ?? true}
