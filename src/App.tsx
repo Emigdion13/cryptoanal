@@ -13,11 +13,14 @@ import { Header } from './ui/Header'
 import { IndicatorSettings } from './ui/IndicatorSettings'
 import { IndicatorsDialog } from './ui/IndicatorsDialog'
 import { IntervalDialog } from './ui/IntervalDialog'
+import { onSaveProblem } from './data/workspace'
+import { LayoutControls } from './ui/LayoutControls'
 import { LayoutGrid, sizesFor } from './ui/LayoutGrid'
 import { LAYOUT_BY_ID, LAYOUTS } from './ui/layouts'
 import { newChart, useSettings, type ChartState } from './ui/settings'
 import { LeftToolbar, RightToolbar } from './ui/Sidebars'
 import { SymbolSearch } from './ui/SymbolSearch'
+import { useWorkspace } from './ui/useWorkspace'
 import { Watchlist } from './ui/Watchlist'
 
 type SearchState = { initial: string; mode: 'symbol' | 'watchlist' }
@@ -29,6 +32,9 @@ function cloneIndicators(list: IndicatorInstance[]): IndicatorInstance[] {
 
 export function App() {
   const [settings, update] = useSettings()
+  const ws = useWorkspace(settings, update)
+  const [saveProblem, setSaveProblem] = useState<string | null>(null)
+  useEffect(() => onSaveProblem(setSaveProblem), [])
   const catalog = useCatalog()
   const layout = LAYOUT_BY_ID.get(settings.layout) ?? LAYOUTS[0]
   const count = layout.cells.length
@@ -57,6 +63,15 @@ export function App() {
     setEngineVersion((v) => v + 1)
   }, [])
   const onAutoScale = useCallback((index: number, on: boolean) => setAutoScales((a) => ({ ...a, [index]: on })), [])
+  const onPaneSizes = useCallback(
+    (index: number, paneSizes: Record<string, number>) =>
+      update((s) => {
+        const next = [...s.charts]
+        if (next[index]) next[index] = { ...next[index], paneSizes }
+        return { charts: next }
+      }),
+    [update],
+  )
 
   /** Changes one chart; with symbol or interval sync on, every chart in the layout follows. */
   const updateChart = useCallback(
@@ -173,7 +188,7 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
-      if (target.closest('input, textarea, select, [contenteditable]') || modalOpen) return
+      if (target.closest?.('input, textarea, select, [contenteditable]') || modalOpen) return
       const engine = engines.current.get(active)
       if (e.altKey && e.code === 'KeyR') {
         e.preventDefault()
@@ -222,6 +237,7 @@ export function App() {
         onSync={(sync) => update({ sync })}
         onFullscreen={toggleFullscreen}
         onScreenshot={screenshot}
+        saveControls={<LayoutControls ws={ws} />}
       />
       <LeftToolbar cursor={settings.cursor} onCursor={(cursor) => update({ cursor })} />
       <main className="center">
@@ -253,6 +269,7 @@ export function App() {
                 onActivate={(index) => index !== settings.active && update({ active: index })}
                 onEngine={onEngine}
                 onAutoScale={onAutoScale}
+                onPaneSizes={onPaneSizes}
                 onToggle={(id) =>
                   setIndicators(i, (list) => list.map((x) => (x.id === id ? { ...x, hidden: !x.hidden } : x)))
                 }
@@ -285,6 +302,7 @@ export function App() {
         watchlistOpen={settings.watchlistOpen}
         onWatchlist={() => update({ watchlistOpen: !settings.watchlistOpen })}
       />
+      {saveProblem && <div className="save-toast">{saveProblem}</div>}
       {search && (
         <SymbolSearch
           catalog={catalog}

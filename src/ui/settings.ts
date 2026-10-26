@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import type { ChartType, CursorMode, PriceMode } from '../chart/ChartEngine'
 import { createInstance } from '../indicators/catalog'
 import type { IndicatorInstance } from '../indicators/types'
+import { getInitialSettings, getInitialV1, queueSettings } from '../data/workspace'
 import type { SplitSizes } from './LayoutGrid'
 
 /** One chart of the layout. */
@@ -11,6 +12,8 @@ export interface ChartState {
   chartType: ChartType
   priceMode: PriceMode
   indicators: IndicatorInstance[]
+  /** Pane heights after dragging their separators: 'main' and indicator ids, relative. */
+  paneSizes?: Record<string, number>
 }
 
 /** TradingView's "Sync in layout" options. */
@@ -34,10 +37,11 @@ export interface Settings {
   cursor: CursorMode
   watchlist: string[]
   watchlistOpen: boolean
+  /** The saved layout being edited, or null for an unsaved ("Unnamed") one. */
+  currentLayoutId: string | null
+  /** Save the current layout as it changes, as TradingView's Autosave does. */
+  autosave: boolean
 }
-
-const KEY = 'cryptoanal.settings.v2'
-const OLD_KEY = 'cryptoanal.settings.v1'
 
 export function newChart(from?: Partial<ChartState>): ChartState {
   return {
@@ -45,12 +49,12 @@ export function newChart(from?: Partial<ChartState>): ChartState {
     interval: '1D',
     chartType: 'candles',
     priceMode: 'normal',
-    ...from,
+    ...Object.fromEntries(Object.entries(from ?? {}).filter(([, v]) => v !== undefined)),
     indicators: from?.indicators ?? [createInstance('volume')],
   }
 }
 
-function defaults(): Settings {
+export function defaults(): Settings {
   return {
     layout: '1',
     splits: {},
@@ -61,48 +65,44 @@ function defaults(): Settings {
     cursor: 'cross',
     watchlist: ['BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD', 'DOGE-USD', 'ADA-USD', 'AVAX-USD', 'LINK-USD', 'LTC-USD', 'BCH-USD'],
     watchlistOpen: typeof window !== 'undefined' && window.innerWidth >= 1100,
+    currentLayoutId: null,
+    autosave: true,
   }
 }
 
 function load(): Settings {
   const base = defaults()
-  try {
-    const raw = localStorage.getItem(KEY)
-    if (raw) {
-      const saved = JSON.parse(raw) as Partial<Settings>
-      return { ...base, ...saved, sync: { ...base.sync, ...saved.sync }, charts: saved.charts?.length ? saved.charts : base.charts }
+  const saved = getInitialSettings()
+  if (saved)
+    return {
+      ...base,
+      ...saved,
+      sync: { ...base.sync, ...saved.sync },
+      charts: saved.charts?.length ? saved.charts : base.charts,
     }
-    // The single-chart settings of the first version.
-    const old = localStorage.getItem(OLD_KEY)
-    if (old) {
-      const v1 = JSON.parse(old) as Partial<Omit<Settings, 'charts'> & ChartState>
-      const { symbol, interval, chartType, priceMode, favorites, cursor, watchlist, watchlistOpen } = v1
-      return {
-        ...base,
-        charts: [newChart({ symbol, interval, chartType, priceMode })],
-        ...(favorites && { favorites }),
-        ...(cursor && { cursor }),
-        ...(watchlist && { watchlist }),
-        ...(watchlistOpen !== undefined && { watchlistOpen }),
-      }
+  // The single-chart settings of the first version.
+  const v1 = getInitialV1() as Partial<Omit<Settings, 'charts'> & ChartState> | null
+  if (v1) {
+    const { symbol, interval, chartType, priceMode, favorites, cursor, watchlist, watchlistOpen } = v1
+    return {
+      ...base,
+      charts: [newChart({ symbol, interval, chartType, priceMode })],
+      ...(favorites && { favorites }),
+      ...(cursor && { cursor }),
+      ...(watchlist && { watchlist }),
+      ...(watchlistOpen !== undefined && { watchlistOpen }),
     }
-  } catch {
-    // Private windows and blocked storage just start from the defaults.
   }
   return base
 }
 
-/** The chart's settings, remembered in this browser. */
+/** The app's settings, kept in the workspace file (or the browser without the dev server). */
 export function useSettings(): [Settings, (patch: Partial<Settings> | ((s: Settings) => Partial<Settings>)) => void] {
   const [settings, setSettings] = useState(load)
   const update = useCallback((patch: Partial<Settings> | ((s: Settings) => Partial<Settings>)) => {
     setSettings((prev) => {
       const next = { ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) }
-      try {
-        localStorage.setItem(KEY, JSON.stringify(next))
-      } catch {
-        // Not remembered; the chart still works.
-      }
+      queueSettings(next)
       return next
     })
   }, [])

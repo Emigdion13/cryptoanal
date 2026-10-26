@@ -111,6 +111,18 @@ export const LayoutIcon = (p: IconProps) => (
   </Icon>
 )
 
+export const CheckIcon = (p: IconProps) => (
+  <Icon size={18} viewBox="0 0 18 18" strokeWidth={1.5} {...p}>
+    <path d="m4 9.5 3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
+  </Icon>
+)
+
+export const TrashIcon = (p: IconProps) => (
+  <Icon size={18} viewBox="0 0 18 18" {...p}>
+    <path d="M3.5 5h11M7 5V3.5h4V5M5 5l.7 9.5h6.6L13 5M7.5 7.5v5M10.5 7.5v5" strokeLinejoin="round" />
+  </Icon>
+)
+
 export const MenuIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M7 9h14M7 14h14M7 19h14" />

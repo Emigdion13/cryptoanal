@@ -76,6 +76,8 @@ interface Events {
   crosshair: { time: number | null; price: number | null }
   /** The user scrolled or zoomed: the time at the right edge (not when set by alignRightEdge). */
   timeRange: { time: number }
+  /** The user dragged a pane separator: relative heights by 'main' / indicator id. */
+  paneSizes: Record<string, number>
 }
 
 /** A live indicator: its series, last output and what it was computed from. */
@@ -136,6 +138,9 @@ export class ChartEngine {
   private runtimes: Runtime[] = []
   private structure = ''
   private indicatorsDirty = false
+  /** Saved pane heights, and which pane is which ('main', then indicator ids). */
+  private paneSizes: Record<string, number> = {}
+  private paneIds: string[] = ['main']
 
   /** Set while this chart is being moved by another one, so it doesn't echo back. */
   private syncing = false
@@ -320,6 +325,36 @@ export class ChartEngine {
     this.emitLegend()
   }
 
+  /** Pane heights to use (from a saved layout); applied now and on every rebuild. */
+  setPaneSizes(sizes: Record<string, number> | undefined) {
+    this.paneSizes = sizes ?? {}
+    this.applyPaneSizes()
+  }
+
+  /** The stretch factors last set here; the engine changes its own while a separator is dragged. */
+  private appliedFactors: number[] = []
+
+  private applyPaneSizes() {
+    const panes = this.chart.panes()
+    this.appliedFactors = this.paneIds.map((id) => this.paneSizes[id] ?? (id === 'main' ? 3 : 1))
+    this.appliedFactors.forEach((f, k) => panes[k]?.setStretchFactor(f))
+  }
+
+  /** After a drag: if the panes no longer match their stretch factors, report the new sizes. */
+  private checkPaneSizes() {
+    const panes = this.chart.panes()
+    if (panes.length < 2 || panes.length !== this.paneIds.length) return
+    const heights = panes.map((p) => p.getHeight())
+    const factors = this.appliedFactors
+    const h = heights.reduce((a, b) => a + b, 0),
+      f = factors.reduce((a, b) => a + b, 0)
+    if (!h || heights.every((v, k) => Math.abs(v / h - factors[k] / f) < 0.01)) return
+    const sizes = Object.fromEntries(this.paneIds.map((id, k) => [id, Math.round((heights[k] / h) * 1000) / 100]))
+    this.paneSizes = sizes
+    this.applyPaneSizes()
+    this.emit('paneSizes', sizes)
+  }
+
   /** The indicator's values at the legend's bar, ready to print. */
   indicatorValues(id: string, index: number): LegendValue[] {
     const rt = this.runtimes.find((r) => r.inst.id === id)
@@ -351,10 +386,12 @@ export class ChartEngine {
     while (this.chart.panes().length > 1) this.chart.removePane(this.chart.panes().length - 1)
 
     let nextPane = 1
+    this.paneIds = ['main']
     for (const inst of this.instances) {
       const def = INDICATOR_BY_TYPE.get(inst.type)
       if (!def) continue
       const pane = def.overlay ? 0 : nextPane++
+      if (!def.overlay) this.paneIds.push(inst.id)
       const rt: Runtime = {
         inst,
         def,
@@ -414,9 +451,9 @@ export class ChartEngine {
       this.computeRuntime(rt)
     }
 
-    // TradingView keeps most of the height for prices; each indicator pane gets a slice.
-    const panes = this.chart.panes()
-    panes.forEach((p, k) => p.setStretchFactor(k === 0 ? 3 : 1))
+    // TradingView keeps most of the height for prices; each indicator pane gets a slice,
+    // unless the layout remembers heights the user dragged.
+    this.applyPaneSizes()
   }
 
   private styleRuntime(rt: Runtime) {
@@ -974,7 +1011,11 @@ export class ChartEngine {
         })
       } else scale.setVisibleRange({ from: from + shift * (to - from), to: to + shift * (to - from) })
     }
-    const onUp = () => (drag = null)
+    const onUp = () => {
+      drag = null
+      // A pane separator may just have been dragged.
+      requestAnimationFrame(() => this.checkPaneSizes())
+    }
 
     let anchorTimer: ReturnType<typeof setTimeout> | undefined
     const onWheel = (event: WheelEvent) => {

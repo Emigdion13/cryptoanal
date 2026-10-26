@@ -23,11 +23,12 @@ interface Props extends IndicatorActions {
   onActivate: (index: number) => void
   onEngine: (index: number, engine: ChartEngine | null) => void
   onAutoScale: (index: number, on: boolean) => void
+  onPaneSizes: (index: number, sizes: Record<string, number>) => void
 }
 
 /** One chart of the layout, with its own symbol, interval, data feed and legends. */
 export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(props, ref) {
-  const { index, state, catalog, cursor, onEngine, onAutoScale } = props
+  const { index, state, catalog, cursor, onEngine, onAutoScale, onPaneSizes } = props
   const product = getProduct(catalog, state.symbol)
   const interval = parseInterval(state.interval)
   const hostRef = useRef<HTMLDivElement>(null)
@@ -43,6 +44,7 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
       e.on('panes', setPanes),
       e.on('realtime', setRealtime),
       e.on('autoScale', (on) => onAutoScale(index, on)),
+      e.on('paneSizes', (sizes) => onPaneSizes(index, sizes)),
     ]
     setEngine(e)
     onEngine(index, e)
@@ -52,11 +54,12 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
       onEngine(index, null)
       e.destroy()
     }
-  }, [index, onEngine, onAutoScale])
+  }, [index, onEngine, onAutoScale, onPaneSizes])
 
   useEffect(() => engine?.setChartType(state.chartType), [engine, state.chartType])
   useEffect(() => engine?.setPriceMode(state.priceMode), [engine, state.priceMode])
   useEffect(() => engine?.setCursor(cursor), [engine, cursor])
+  useEffect(() => engine?.setPaneSizes(state.paneSizes), [engine, state.paneSizes])
   useEffect(() => engine?.setIndicators(state.indicators), [engine, state.indicators])
 
   const { status, showRange } = useChartData(engine, product, state.interval)

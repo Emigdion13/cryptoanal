@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import type { ChartType } from '../chart/ChartEngine'
 import { INTERVAL_MENU, parseInterval, type IntervalGroup } from '../data/intervals'
 import type { Product } from '../data/types'
@@ -47,6 +47,8 @@ interface Props {
   sync: SyncOptions
   onLayout: (id: string) => void
   onSync: (sync: SyncOptions) => void
+  /** The layout name menu and Save button. */
+  saveControls: ReactNode
 }
 
 export function Header(props: Props) {
@@ -93,6 +95,9 @@ export function Header(props: Props) {
       <div className="sep" />
       <div className="header-spacer" />
       <LayoutMenu layout={props.layout} sync={props.sync} onLayout={props.onLayout} onSync={props.onSync} />
+      <div className="sep" />
+      {props.saveControls}
+      <div className="sep" />
       <button className="tb-btn icon" onClick={props.onFullscreen} title="Fullscreen mode">
         <FullscreenIcon />
       </button>
