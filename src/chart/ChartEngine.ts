@@ -22,7 +22,10 @@ import {
 import { nextBucket, type IntervalDef } from '../data/intervals'
 import type { Candle } from '../data/types'
 import { formatCountdown, formatCrosshairTime, formatPrice, formatVolume } from '../format'
+import { defaultInputs, INDICATOR_BY_TYPE } from '../indicators/catalog'
+import type { IndicatorDef, IndicatorInstance, Output } from '../indicators/types'
 import { theme } from '../theme'
+import { FillPrimitive, type Fill } from './FillPrimitive'
 import { heikinAshi, nextHeikinAshi } from './heikinAshi'
 
 export type ChartType =
@@ -42,10 +45,23 @@ export type CursorMode = 'cross' | 'dot' | 'arrow'
 
 export interface LegendState {
   bar: Candle
+  /** Index of `bar`; indicator values are read at the same index. */
+  index: number
   /** Close of the bar before, for the change figures. */
   prevClose: number | null
   /** The newest bar (no hover). */
   live: boolean
+}
+
+export interface PaneRect {
+  top: number
+  height: number
+}
+
+export interface LegendValue {
+  key: string
+  text: string
+  color: string
 }
 
 interface Events {
@@ -54,41 +70,77 @@ interface Events {
   autoScale: boolean
   /** True while the newest bar is on screen. */
   realtime: boolean
+  /** Where each pane sits in the chart, for the per-pane legends. */
+  panes: PaneRect[]
+  /** The user moved the crosshair (time null = it left the chart). */
+  crosshair: { time: number | null; price: number | null }
+  /** The user scrolled or zoomed: the time at the right edge (not when set by alignRightEdge). */
+  timeRange: { time: number }
+}
+
+/** A live indicator: its series, last output and what it was computed from. */
+interface Runtime {
+  inst: IndicatorInstance
+  def: IndicatorDef
+  series: Map<string, ISeriesApi<SeriesType>>
+  out: Output
+  fill: FillPrimitive | null
+  count: number
+  inputsKey: string
+  stylesKey: string
 }
 
 const RIGHT_OFFSET = 8
 const DEFAULT_SPACING = 6
-// The volume label is opaque; these match the 50% volume bars over black.
-const VOLUME_LABEL = { up: '#13534d', down: '#782a28' }
+const LEVEL_STYLE = { solid: LineStyle.Solid, dashed: LineStyle.Dashed, dotted: LineStyle.Dotted }
 
 const asTime = (t: number) => t as UTCTimestamp
+
+/** A translucent color as it looks over the black pane, made opaque for an axis label. */
+function opaqueOnBlack(color: string): string {
+  const m = /rgba\(\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\s*\)/.exec(color)
+  if (!m) return color
+  const a = Number(m[4])
+  return `rgb(${Math.round(Number(m[1]) * a)}, ${Math.round(Number(m[2]) * a)}, ${Math.round(Number(m[3]) * a)})`
+}
 
 /**
  * TradingView's own chart engine (lightweight-charts), tuned to look and move like
  * tradingview.com: its colors and margins, its wheel/drag/fling behavior, the last-price label
- * with the bar countdown, and the volume overlay.
+ * with the bar countdown, and indicators in the price pane or in panes of their own.
  */
 export class ChartEngine {
   readonly chart: IChartApi
   private main: ISeriesApi<SeriesType> | null = null
-  private volume: ISeriesApi<'Histogram'>
   private type: ChartType = 'candles'
   private bars: Candle[] = []
   private ha: Candle[] = []
   private def: IntervalDef | null = null
   private precision = 2
   private priceMode: PriceMode = 'normal'
+  private cursor: CursorMode = 'cross'
   private hoverIndex: number | null = null
   private crosshairY: number | null = null
   private listeners = new Map<keyof Events, Set<(v: never) => void>>()
   private lastAuto = true
   private lastRealtime = true
+  private panesKey = ''
   private priceLabel: HTMLDivElement
   private volumeLabel: HTMLDivElement
   private labelKey = ''
   private volumeKey = ''
   private raf = 0
   private cleanup: (() => void)[] = []
+
+  private instances: IndicatorInstance[] = []
+  private runtimes: Runtime[] = []
+  private structure = ''
+  private indicatorsDirty = false
+
+  /** Set while this chart is being moved by another one, so it doesn't echo back. */
+  private syncing = false
+  private applyingRangeUntil = 0
+  private horzHidden = false
 
   constructor(private host: HTMLElement) {
     this.chart = createChart(host, {
@@ -99,6 +151,7 @@ export class ChartEngine {
         fontSize: 12,
         fontFamily: theme.font,
         attributionLogo: true,
+        panes: { separatorColor: '#2b2b2b', separatorHoverColor: 'rgba(41, 98, 255, 0.35)', enableResize: true },
       },
       grid: { vertLines: { color: theme.grid }, horzLines: { color: theme.grid } },
       rightPriceScale: {
@@ -141,15 +194,8 @@ export class ChartEngine {
         timeFormatter: (t: Time) => formatCrosshairTime(t as number, this.def?.intraday ?? true),
       },
     })
-
-    // Volume first, so the price series draws on top of it.
-    this.volume = this.chart.addSeries(HistogramSeries, {
-      priceScaleId: 'volume',
-      priceFormat: { type: 'volume' },
-      lastValueVisible: false,
-      priceLineVisible: false,
-    })
-    this.chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.75, bottom: 0 } })
+    // Swapping the price series must never leave pane 0 empty, or the panes below would shift up.
+    this.chart.panes()[0].setPreserveEmptyPane(true)
     this.createMain()
 
     this.priceLabel = this.makeLabel()
@@ -159,8 +205,10 @@ export class ChartEngine {
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.onRange)
     this.bindPointer()
     const loop = () => {
+      if (this.indicatorsDirty) this.syncIndicators()
       this.paintLabels()
       this.watchScale()
+      this.watchPanes()
       this.raf = requestAnimationFrame(loop)
     }
     this.raf = requestAnimationFrame(loop)
@@ -196,6 +244,8 @@ export class ChartEngine {
     if (precision === this.precision) return
     this.precision = precision
     this.main?.applyOptions({ priceFormat: this.priceFormat() })
+    for (const rt of this.runtimes)
+      if (rt.def.format === 'price') for (const s of rt.series.values()) s.applyOptions({ priceFormat: this.priceFormat() })
   }
 
   /**
@@ -209,6 +259,7 @@ export class ChartEngine {
     this.bars = bars
     this.ha = this.type === 'heikinAshi' ? heikinAshi(bars) : []
     this.applyData()
+    for (const rt of this.runtimes) this.computeRuntime(rt)
 
     if (!keep || !before.length || !range) {
       this.chart.priceScale('right').applyOptions({ autoScale: true })
@@ -234,12 +285,195 @@ export class ChartEngine {
       this.ha.push(nextHeikinAshi(bar, this.ha[i - 1]))
     }
     this.main?.update(this.point(i))
-    this.volume.update(this.volumePoint(i))
+    // Indicators catch up once per frame, not once per trade.
+    if (this.runtimes.length) this.indicatorsDirty = true
     if (this.hoverIndex === null) this.emitLegend()
   }
 
   getBars(): readonly Candle[] {
     return this.bars
+  }
+
+  // ── indicators ──────────────────────────────────────────────────────────
+
+  /** Shows these indicators, in order: overlays on the price pane, the rest in panes below. */
+  setIndicators(list: IndicatorInstance[]) {
+    this.instances = list
+    const structure = list.map((i) => `${i.id}:${i.type}`).join('|')
+    if (structure !== this.structure) {
+      this.structure = structure
+      this.rebuildIndicators()
+    } else
+      this.runtimes.forEach((rt, k) => {
+        const inst = list[k]
+        rt.inst = inst
+        const inputsKey = JSON.stringify(inst.inputs)
+        const stylesKey = JSON.stringify(inst.styles) + inst.hidden
+        if (inputsKey === rt.inputsKey && stylesKey === rt.stylesKey) return
+        rt.inputsKey = inputsKey
+        if (stylesKey !== rt.stylesKey) {
+          rt.stylesKey = stylesKey
+          this.styleRuntime(rt)
+        }
+        this.computeRuntime(rt)
+      })
+    this.emitLegend()
+  }
+
+  /** The indicator's values at the legend's bar, ready to print. */
+  indicatorValues(id: string, index: number): LegendValue[] {
+    const rt = this.runtimes.find((r) => r.inst.id === id)
+    if (!rt) return []
+    return rt.def.plots
+      .filter((p) => rt.inst.styles[p.key]?.visible !== false)
+      .map((p) => {
+        const v = rt.out.values[p.key]?.[index]
+        const color = rt.out.colors?.[p.key]?.[index] ?? rt.inst.styles[p.key]?.color ?? p.color
+        return { key: p.key, text: Number.isFinite(v) ? this.formatValue(rt.def, v) : 'n/a', color: opaqueOnBlack(color) }
+      })
+  }
+
+  private formatValue(def: IndicatorDef, v: number): string {
+    if (def.format === 'volume') return formatVolume(v, true)
+    if (def.format === 'price') return formatPrice(v, this.precision)
+    return formatPrice(v, 2)
+  }
+
+  private indicatorFormat(def: IndicatorDef) {
+    if (def.format === 'volume') return { type: 'volume' as const }
+    if (def.format === 'price') return this.priceFormat()
+    return { type: 'price' as const, precision: 2, minMove: 0.01 }
+  }
+
+  private rebuildIndicators() {
+    for (const rt of this.runtimes) for (const s of rt.series.values()) this.chart.removeSeries(s)
+    this.runtimes = []
+    while (this.chart.panes().length > 1) this.chart.removePane(this.chart.panes().length - 1)
+
+    let nextPane = 1
+    for (const inst of this.instances) {
+      const def = INDICATOR_BY_TYPE.get(inst.type)
+      if (!def) continue
+      const pane = def.overlay ? 0 : nextPane++
+      const rt: Runtime = {
+        inst,
+        def,
+        series: new Map(),
+        out: { values: {} },
+        fill: null,
+        count: 0,
+        inputsKey: JSON.stringify(inst.inputs),
+        stylesKey: JSON.stringify(inst.styles) + inst.hidden,
+      }
+      for (const plot of def.plots) {
+        const style = inst.styles[plot.key]
+        const common = {
+          priceScaleId: def.ownScale ? `ind-${inst.id}` : 'right',
+          // The volume scale has no axis; its label is drawn by paintLabels.
+          lastValueVisible: !def.ownScale,
+          priceLineVisible: false,
+          priceFormat: this.indicatorFormat(def),
+          visible: !inst.hidden && style?.visible !== false,
+        }
+        const color = style?.color ?? plot.color
+        const width = (style?.width ?? 1) as 1 | 2 | 3 | 4
+        let series: ISeriesApi<SeriesType>
+        if (plot.kind === 'histogram') series = this.chart.addSeries(HistogramSeries, { ...common, color }, pane)
+        else if (plot.kind === 'dots')
+          series = this.chart.addSeries(
+            LineSeries,
+            { ...common, color, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 1 + width / 2, crosshairMarkerVisible: false },
+            pane,
+          )
+        else
+          series = this.chart.addSeries(
+            LineSeries,
+            { ...common, color, lineWidth: width, lineType: plot.kind === 'step' ? LineType.WithSteps : LineType.Simple, crosshairMarkerRadius: 3 },
+            pane,
+          )
+        if (def.ownScale) series.priceScale().applyOptions({ scaleMargins: { top: 0.75, bottom: 0 } })
+        rt.series.set(plot.key, series)
+      }
+      const first = rt.series.values().next().value
+      if (first) {
+        for (const level of def.levels ?? [])
+          first.createPriceLine({
+            price: level.value,
+            color: level.color,
+            lineWidth: 1,
+            lineStyle: LEVEL_STYLE[level.style],
+            axisLabelVisible: false,
+            title: '',
+          })
+        if (def.fills?.length) {
+          rt.fill = new FillPrimitive()
+          first.attachPrimitive(rt.fill)
+        }
+      }
+      this.runtimes.push(rt)
+      this.computeRuntime(rt)
+    }
+
+    // TradingView keeps most of the height for prices; each indicator pane gets a slice.
+    const panes = this.chart.panes()
+    panes.forEach((p, k) => p.setStretchFactor(k === 0 ? 3 : 1))
+  }
+
+  private styleRuntime(rt: Runtime) {
+    for (const plot of rt.def.plots) {
+      const style = rt.inst.styles[plot.key]
+      const series = rt.series.get(plot.key)
+      if (!series || !style) continue
+      const visible = !rt.inst.hidden && style.visible
+      const width = style.width as 1 | 2 | 3 | 4
+      if (plot.kind === 'histogram') series.applyOptions({ color: style.color, visible })
+      else if (plot.kind === 'dots') series.applyOptions({ color: style.color, visible, pointMarkersRadius: 1 + width / 2 })
+      else series.applyOptions({ color: style.color, visible, lineWidth: width })
+    }
+  }
+
+  private computeRuntime(rt: Runtime) {
+    rt.out = rt.def.compute(this.bars, { ...defaultInputs(rt.def), ...rt.inst.inputs }, rt.inst.styles)
+    rt.count = this.bars.length
+    for (const [key, series] of rt.series) series.setData(this.bars.map((_, i) => this.indicatorPoint(rt, key, i)))
+    this.updateFills(rt)
+  }
+
+  private indicatorPoint(rt: Runtime, key: string, i: number) {
+    const time = asTime(this.bars[i].time)
+    const v = rt.out.values[key]?.[i]
+    if (v === undefined || !Number.isFinite(v)) return { time }
+    const color = rt.out.colors?.[key]?.[i]
+    return color ? { time, value: v, color } : { time, value: v }
+  }
+
+  private updateFills(rt: Runtime) {
+    if (!rt.fill) return
+    const fills: Fill[] = rt.inst.hidden
+      ? []
+      : (rt.def.fills ?? []).map((f) => ({
+          from: typeof f.from === 'number' ? f.from : (rt.out.values[f.from] ?? []),
+          to: typeof f.to === 'number' ? f.to : (rt.out.values[f.to] ?? []),
+          color: f.color,
+          colorBelow: f.colorBelow,
+        }))
+    rt.fill.setFills(fills)
+  }
+
+  /** Brings indicators up to the live bar: one recompute, then only the last point is sent. */
+  private syncIndicators() {
+    this.indicatorsDirty = false
+    const n = this.bars.length
+    for (const rt of this.runtimes) {
+      if (rt.count !== n) {
+        this.computeRuntime(rt)
+        continue
+      }
+      rt.out = rt.def.compute(this.bars, { ...defaultInputs(rt.def), ...rt.inst.inputs }, rt.inst.styles)
+      for (const [key, series] of rt.series) series.update(this.indicatorPoint(rt, key, n - 1))
+      this.updateFills(rt)
+    }
+    if (this.hoverIndex === null) this.emitLegend()
   }
 
   // ── appearance ──────────────────────────────────────────────────────────
@@ -251,6 +485,9 @@ export class ChartEngine {
     this.createMain()
     this.ha = type === 'heikinAshi' ? heikinAshi(this.bars) : []
     this.applyData()
+    // Re-add indicators so they draw on top of the new price series again.
+    this.structure = ''
+    this.setIndicators(this.instances)
   }
 
   setPriceMode(mode: PriceMode) {
@@ -273,9 +510,11 @@ export class ChartEngine {
   }
 
   setCursor(mode: CursorMode) {
+    this.cursor = mode
+    this.horzHidden = false
     const lines = mode === 'cross'
     this.chart.applyOptions({
-      crosshair: { vertLine: { visible: lines }, horzLine: { visible: lines } },
+      crosshair: { vertLine: { visible: lines }, horzLine: { visible: lines, labelVisible: true } },
     })
     this.host.dataset.cursor = mode
   }
@@ -312,6 +551,86 @@ export class ChartEngine {
     const last = this.bars.length - 1
     this.chart.timeScale().setVisibleLogicalRange({ from: i - 0.5, to: last + 2 })
     this.setAutoScale(true)
+  }
+
+  // ── sync between charts of a layout ─────────────────────────────────────
+
+  /** Shows another chart's crosshair here. `price` null = a different symbol: vertical line only. */
+  syncCrosshair(time: number | null, price: number | null) {
+    this.syncing = true
+    try {
+      const bar = time === null ? undefined : this.barAt(time)
+      if (!bar || !this.main) {
+        this.chart.clearCrosshairPosition()
+        this.showHorzLine(true)
+        return
+      }
+      this.showHorzLine(price !== null)
+      this.chart.setCrosshairPosition(price ?? bar.close, asTime(bar.time), this.main)
+    } finally {
+      this.syncing = false
+    }
+  }
+
+  /**
+   * Follows another chart's scrolling: the same moment at the right edge, at this chart's own
+   * zoom, as TradingView's time sync does between different intervals.
+   */
+  alignRightEdge(time: number) {
+    const ts = this.chart.timeScale()
+    const range = ts.getVisibleLogicalRange()
+    const target = this.timeToLogical(time)
+    if (!range || target === null) return
+    this.applyingRangeUntil = performance.now() + 150
+    ts.setVisibleLogicalRange({ from: target - (range.to - range.from), to: target })
+  }
+
+  /** Bar position of a time, with fractions, extended past either end at the interval's pace. */
+  private timeToLogical(time: number): number | null {
+    const bars = this.bars,
+      sec = this.def?.seconds ?? 60
+    if (!bars.length) return null
+    const last = bars.length - 1
+    if (time >= bars[last].time) return last + (time - bars[last].time) / sec
+    if (time < bars[0].time) return (time - bars[0].time) / sec
+    const bar = this.barAt(time)!
+    const i = bars.indexOf(bar)
+    return i + Math.min(0.999, (time - bar.time) / sec)
+  }
+
+  private logicalToTime(logical: number): number | null {
+    const bars = this.bars,
+      sec = this.def?.seconds ?? 60
+    if (!bars.length) return null
+    const last = bars.length - 1
+    if (logical >= last) return bars[last].time + (logical - last) * sec
+    if (logical < 0) return bars[0].time + logical * sec
+    const i = Math.floor(logical)
+    return bars[i].time + (logical - i) * sec
+  }
+
+  /** The bar holding `time`: the last one that opened at or before it. */
+  private barAt(time: number): Candle | undefined {
+    const bars = this.bars
+    let lo = 0,
+      hi = bars.length - 1,
+      found = -1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (bars[mid].time <= time) {
+        found = mid
+        lo = mid + 1
+      } else hi = mid - 1
+    }
+    return found < 0 ? undefined : bars[found]
+  }
+
+  private showHorzLine(show: boolean) {
+    if (show === !this.horzHidden) return
+    this.horzHidden = !show
+    this.chart.applyOptions({
+      crosshair: { horzLine: { visible: show && this.cursor === 'cross', labelVisible: show } },
+    })
   }
 
   /** A PNG of the chart with the price label and title drawn in. */
@@ -445,20 +764,10 @@ export class ChartEngine {
     }
   }
 
-  private volumePoint(i: number) {
-    const b = this.bars[i]
-    return {
-      time: asTime(b.time),
-      value: b.volume,
-      color: b.close >= b.open ? theme.volumeUp : theme.volumeDown,
-    }
-  }
-
   private applyData() {
     if (!this.main) return
     const n = this.bars.length
     this.main.setData(Array.from({ length: n }, (_, i) => this.point(i)))
-    this.volume.setData(Array.from({ length: n }, (_, i) => this.volumePoint(i)))
     if (this.type === 'baseline' && n) {
       // TradingView's baseline sits at the middle of the recent range.
       const recent = this.bars.slice(-200)
@@ -476,11 +785,22 @@ export class ChartEngine {
   private emitLegend() {
     const i = this.hoverIndex ?? this.bars.length - 1
     const bar = this.bars[i]
-    this.emit('legend', bar ? { bar, prevClose: this.bars[i - 1]?.close ?? null, live: this.hoverIndex === null } : null)
+    this.emit(
+      'legend',
+      bar ? { bar, index: i, prevClose: this.bars[i - 1]?.close ?? null, live: this.hoverIndex === null } : null,
+    )
   }
 
   private onCrosshair = (param: MouseEventParams<Time>) => {
-    this.crosshairY = param.point ? param.point.y : null
+    this.crosshairY = param.point && param.paneIndex === 0 ? param.point.y : null
+    if (!this.syncing) {
+      if (param.sourceEvent) this.showHorzLine(true)
+      if (param.sourceEvent || !param.point)
+        this.emit('crosshair', {
+          time: param.point && param.time !== undefined ? (param.time as number) : null,
+          price: param.point && param.paneIndex === 0 && this.main ? this.main.coordinateToPrice(param.point.y) : null,
+        })
+    }
     const logical = param.logical
     const i =
       param.point && logical !== undefined && logical !== null && logical >= 0 && logical < this.bars.length
@@ -494,6 +814,9 @@ export class ChartEngine {
   private onRange = (range: LogicalRange | null) => {
     if (!range) return
     if (range.from < 50 && this.bars.length) this.emit('needMore', undefined)
+    if (performance.now() < this.applyingRangeUntil) return
+    const time = this.logicalToTime(range.to)
+    if (time !== null) this.emit('timeRange', { time })
   }
 
   /** Polled every frame: range events can arrive between a setData and the scroll after it. */
@@ -508,6 +831,18 @@ export class ChartEngine {
       this.lastRealtime = realtime
       this.emit('realtime', realtime)
     }
+  }
+
+  private watchPanes() {
+    const hostTop = this.host.getBoundingClientRect().top
+    const rects = this.chart.panes().map((p) => {
+      const r = p.getHTMLElement()?.getBoundingClientRect()
+      return { top: r ? Math.round(r.top - hostTop) : 0, height: r ? Math.round(r.height) : p.getHeight() }
+    })
+    const key = rects.map((r) => `${r.top}:${r.height}`).join('|')
+    if (key === this.panesKey) return
+    this.panesKey = key
+    this.emit('panes', rects)
   }
 
   private makeLabel(): HTMLDivElement {
@@ -563,14 +898,17 @@ export class ChartEngine {
       }
     }
 
-    const vy = this.volume.priceToCoordinate(bar.volume)
+    // The volume indicator lives on a scale with no axis, so its last value gets a label here.
+    const vol = this.runtimes.find((r) => r.def.type === 'volume' && !r.inst.hidden && r.inst.styles.volume?.visible)
+    const vSeries = vol?.series.get('volume')
+    const vy = vSeries ? vSeries.priceToCoordinate(bar.volume) : null
     const vHeight = 19
     const vTop = vy === null ? null : Math.min(Math.max(vy - vHeight / 2, 0), paneHeight - vHeight)
     const vHidden =
       vTop === null ||
       (top !== null && !hidden && vTop < top + height && vTop + vHeight > top) ||
       (this.crosshairY !== null && Math.abs(this.crosshairY - (vy ?? 0)) < vHeight / 2 + 9)
-    const vColor = bar.close >= bar.open ? VOLUME_LABEL.up : VOLUME_LABEL.down
+    const vColor = opaqueOnBlack(vol?.out.colors?.volume?.[n - 1] ?? theme.volumeUp)
     const vKey = vHidden ? 'hidden' : `${left}|${width}|${vTop}|${vColor}|${bar.volume}`
     if (vKey !== this.volumeKey) {
       this.volumeKey = vKey

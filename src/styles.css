@@ -397,7 +397,6 @@ button {
 .realtime-btn {
   position: absolute;
   right: 82px;
-  bottom: 40px;
   z-index: 3;
   width: 26px;
   height: 26px;
@@ -736,6 +735,371 @@ button {
 @media (max-width: 700px) {
   .search-type,
   .search-exchange {
+    display: none;
+  }
+}
+
+/* ── multi-chart layout ─────────────────────────────────────────────────── */
+
+.layout-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 4px;
+}
+.layout-cell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+.layout-cell > .chart-wrap {
+  position: absolute;
+  inset: 0;
+}
+.chart-wrap.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  border: 1px solid var(--active);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.layout-menu {
+  left: auto;
+  right: 0;
+  min-width: 240px;
+  padding-top: 8px;
+}
+.layout-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px 4px 12px;
+}
+.layout-count {
+  width: 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.layout-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 32px;
+  border-radius: 4px;
+  color: var(--text-dim);
+}
+.layout-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.layout-btn.active {
+  color: var(--active);
+  background: rgba(41, 98, 255, 0.15);
+}
+.menu-section.static {
+  cursor: default;
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+  height: 36px;
+}
+.menu-section.static:hover {
+  color: var(--text-muted);
+}
+.switch-item {
+  cursor: pointer;
+}
+.switch {
+  appearance: none;
+  width: 30px;
+  height: 16px;
+  border-radius: 8px;
+  background: #434343;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin: 0;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.15s;
+}
+.switch:checked {
+  background: var(--active);
+}
+.switch:checked::after {
+  left: 16px;
+}
+
+.tb-btn.with-text {
+  gap: 2px;
+  padding: 0 8px 0 2px;
+}
+
+/* ── indicator legend rows ──────────────────────────────────────────────── */
+
+.ind-row {
+  pointer-events: auto;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 4px;
+  padding: 0 2px;
+  margin-left: 1px;
+  gap: 2px 6px;
+  flex-wrap: nowrap;
+  cursor: default;
+}
+.ind-row:hover {
+  background: rgba(46, 46, 46, 0.6);
+}
+.ind-title {
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ind-row.off .ind-title {
+  color: var(--text-muted);
+}
+.ind-values {
+  display: inline-flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+.ind-values b {
+  font-weight: 400;
+  margin: 0;
+}
+.ind-actions {
+  display: none;
+  align-items: center;
+}
+.ind-row:hover .ind-actions {
+  display: inline-flex;
+}
+.ind-actions button {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 20px;
+  border-radius: 3px;
+  color: var(--text-dim);
+}
+.ind-actions button:hover {
+  background: #3a3a3a;
+  color: var(--text);
+}
+.pane-legend {
+  top: 0;
+}
+
+/* ── indicators dialog ──────────────────────────────────────────────────── */
+
+.indicators-dialog {
+  width: min(800px, calc(100vw - 32px));
+  height: min(620px, calc(100vh - 80px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ind-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.ind-categories {
+  width: 200px;
+  flex: none;
+  border-right: 1px solid var(--border);
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+}
+.ind-cat-head,
+.ind-list-head {
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 8px 20px;
+}
+.ind-cat {
+  text-align: left;
+  height: 34px;
+  padding: 0 20px;
+  color: var(--text);
+}
+.ind-cat:hover {
+  background: var(--hover);
+}
+.ind-cat.active {
+  background: var(--hover);
+  box-shadow: inset 3px 0 var(--active);
+}
+.ind-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.ind-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 34px;
+  padding: 0 20px;
+  color: var(--text);
+  cursor: pointer;
+}
+.ind-item:hover {
+  background: var(--hover);
+}
+.ind-added {
+  font-size: 12px;
+  color: var(--up);
+}
+
+/* ── indicator settings ─────────────────────────────────────────────────── */
+
+.settings-dialog {
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+}
+.tabs {
+  display: flex;
+  gap: 18px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  height: 36px;
+  color: var(--text-dim);
+  border-bottom: 2px solid transparent;
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--text);
+}
+.settings-body {
+  padding: 14px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 160px;
+}
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--text);
+}
+.field input[type='number'],
+.field select {
+  width: 140px;
+  height: 32px;
+  background: #000;
+  color: var(--text);
+  border: 1px solid #434343;
+  border-radius: 6px;
+  padding: 0 8px;
+  font: 14px var(--font);
+  outline: 0;
+}
+.field input[type='number']:focus,
+.field select:focus {
+  border-color: var(--active);
+}
+.field input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--active);
+  margin: 0;
+}
+.style-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.style-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.style-controls select {
+  width: 70px;
+}
+.style-controls input[type='color'] {
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid #434343;
+  border-radius: 6px;
+  background: #000;
+  cursor: pointer;
+}
+.dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+}
+.btn {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.btn.ghost {
+  border: 1px solid #434343;
+  color: var(--text);
+}
+.btn.ghost:hover {
+  background: var(--hover);
+}
+.btn.primary {
+  background: var(--text);
+  color: #000;
+}
+.btn.primary:hover {
+  background: #fff;
+}
+
+/* Narrow windows: TradingView drops labels before it drops buttons. */
+.bb-clock {
+  white-space: nowrap;
+}
+.header > * {
+  flex-shrink: 0;
+}
+.header > .header-spacer {
+  flex-shrink: 1;
+  min-width: 0;
+}
+@media (max-width: 820px) {
+  .tb-btn.with-text span,
+  .bb-clock,
+  .bottom-bar .sep {
+    display: none;
+  }
+  .interval-btn:not(.active) {
     display: none;
   }
 }

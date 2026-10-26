@@ -3,12 +3,15 @@ import type { ChartType } from '../chart/ChartEngine'
 import { INTERVAL_MENU, parseInterval, type IntervalGroup } from '../data/intervals'
 import type { Product } from '../data/types'
 import { useDismiss } from './common'
+import { LayoutMenu } from './LayoutMenu'
+import type { SyncOptions } from './settings'
 import {
   CameraIcon,
   CHART_TYPE_ICONS,
   ChevronDown,
   ChevronRight,
   FullscreenIcon,
+  FxIcon,
   SearchIcon,
   StarIcon,
 } from './icons'
@@ -39,6 +42,11 @@ interface Props {
   onChartType: (type: ChartType) => void
   onFullscreen: () => void
   onScreenshot: () => void
+  onIndicators: () => void
+  layout: string
+  sync: SyncOptions
+  onLayout: (id: string) => void
+  onSync: (sync: SyncOptions) => void
 }
 
 export function Header(props: Props) {
@@ -78,7 +86,13 @@ export function Header(props: Props) {
       <div className="sep" />
       <ChartTypeMenu value={chartType} onPick={props.onChartType} />
       <div className="sep" />
+      <button className="tb-btn with-text" onClick={props.onIndicators} title="Indicators">
+        <FxIcon />
+        <span>Indicators</span>
+      </button>
+      <div className="sep" />
       <div className="header-spacer" />
+      <LayoutMenu layout={props.layout} sync={props.sync} onLayout={props.onLayout} onSync={props.onSync} />
       <button className="tb-btn icon" onClick={props.onFullscreen} title="Fullscreen mode">
         <FullscreenIcon />
       </button>

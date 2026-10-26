@@ -27,6 +27,8 @@ Then open http://localhost:5190.
 - **Chart types:** bars, candles, hollow candles, Heikin Ashi, line, line with markers, step line, area, baseline, columns.
 - **Symbol search** over every Coinbase product. Start typing letters on the chart to open it.
 - **Watchlist** with live prices and the day's change.
+- **Indicators** (the `Indicators` button or `/`): Volume, SMA, EMA, WMA, HMA, VWMA, MA Cross, Bollinger Bands, Keltner, Donchian, Envelope, VWAP, Parabolic SAR, Supertrend, RSI, MACD, Stochastic, Stochastic RSI, CCI, Williams %R, Momentum, ROC, Awesome Oscillator, DMI, Aroon, ATR, BB %b, BB Width, OBV, MFI and CMF, with TradingView's default inputs and colors. Overlays sit on the price pane and the rest get their own panes (drag the separators to resize). Hover a legend row to hide, configure (Inputs / Style) or remove an indicator.
+- **Split screen** (the layout button at top right): 1 to 8 charts, each with its own symbol, interval, chart type and indicators. Click a chart to make it active; the toolbar acts on it. "Sync in layout" links symbol, interval, crosshair and time between charts.
 - **Bottom bar:** date ranges (1D … All) that switch the interval like TradingView, the UTC clock, and `%` / `log` / `auto` scale toggles.
 - History loads as you scroll back; bars update live from Coinbase's trade feed.
 - **Keyboard:** ←/→ scroll, ↑/↓ zoom, Alt+R resets the chart.

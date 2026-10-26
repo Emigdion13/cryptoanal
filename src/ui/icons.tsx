@@ -82,6 +82,35 @@ export const RealtimeIcon = (p: IconProps) => (
   </Icon>
 )
 
+export const EyeIcon = ({ off, ...p }: IconProps & { off?: boolean }) => (
+  <Icon size={18} viewBox="0 0 18 18" {...p}>
+    <path d="M1.5 9S4.2 4 9 4s7.5 5 7.5 5-2.7 5-7.5 5-7.5-5-7.5-5z" />
+    <circle cx="9" cy="9" r="2.2" />
+    {off && <path d="m3 15 12-12" />}
+  </Icon>
+)
+
+export const GearIcon = (p: IconProps) => (
+  <Icon size={18} viewBox="0 0 18 18" {...p}>
+    <circle cx="9" cy="9" r="2.2" />
+    <path d="M7.6 2h2.8l.4 1.9 1.4.8 1.8-.7 1.4 2.4-1.5 1.3v1.6l1.5 1.3-1.4 2.4-1.8-.7-1.4.8-.4 1.9H7.6l-.4-1.9-1.4-.8-1.8.7-1.4-2.4 1.5-1.3V8.1L2.6 6.8 4 4.4l1.8.7 1.4-.8z" strokeLinejoin="round" />
+  </Icon>
+)
+
+export const FxIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M13 8.5c-1.6-.6-3 .2-3.3 2L8.5 20.5c-.3 1.8-1.7 2.6-3.3 2M6.5 12.5h6" strokeLinecap="round" />
+    <path d="m15.5 13 6 7M21.5 13l-6 7" strokeLinecap="round" />
+  </Icon>
+)
+
+export const LayoutIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="6.5" y="7.5" width="15" height="13" rx="1.5" />
+    <path d="M14 7.5v13M6.5 14h7.5" />
+  </Icon>
+)
+
 export const MenuIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M7 9h14M7 14h14M7 19h14" />

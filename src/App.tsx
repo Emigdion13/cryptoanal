@@ -1,60 +1,124 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChartEngine, type LegendState } from './chart/ChartEngine'
+import type { ChartEngine } from './chart/ChartEngine'
 import { parseInterval } from './data/intervals'
 import { describe, getProduct, useCatalog } from './data/products'
 import { useQuotes } from './data/quotes'
 import type { Product } from './data/types'
 import { formatPercent, formatPrice } from './format'
+import { createInstance } from './indicators/catalog'
+import type { IndicatorInstance } from './indicators/types'
 import { BottomBar, type RangePreset } from './ui/BottomBar'
+import { ChartPanel, type PanelHandle } from './ui/ChartPanel'
 import { Header } from './ui/Header'
+import { IndicatorSettings } from './ui/IndicatorSettings'
+import { IndicatorsDialog } from './ui/IndicatorsDialog'
 import { IntervalDialog } from './ui/IntervalDialog'
-import { RealtimeIcon } from './ui/icons'
-import { Legend } from './ui/Legend'
-import { useSettings } from './ui/settings'
+import { LAYOUT_BY_ID, LAYOUTS } from './ui/layouts'
+import { newChart, useSettings, type ChartState } from './ui/settings'
 import { LeftToolbar, RightToolbar } from './ui/Sidebars'
 import { SymbolSearch } from './ui/SymbolSearch'
 import { Watchlist } from './ui/Watchlist'
-import { useChartData } from './useChartData'
 
 type SearchState = { initial: string; mode: 'symbol' | 'watchlist' }
+
+/** A copy of a chart's indicators with fresh ids, for a new chart in the layout. */
+function cloneIndicators(list: IndicatorInstance[]): IndicatorInstance[] {
+  return list.map((i) => ({ ...createInstance(i.type), inputs: { ...i.inputs }, styles: { ...i.styles }, hidden: i.hidden }))
+}
 
 export function App() {
   const [settings, update] = useSettings()
   const catalog = useCatalog()
-  const product = getProduct(catalog, settings.symbol)
-  const interval = parseInterval(settings.interval)
-  const hostRef = useRef<HTMLDivElement>(null)
-  const [engine, setEngine] = useState<ChartEngine | null>(null)
-  const [legend, setLegend] = useState<LegendState | null>(null)
-  const [autoScale, setAutoScale] = useState(true)
-  const [realtime, setRealtime] = useState(true)
+  const layout = LAYOUT_BY_ID.get(settings.layout) ?? LAYOUTS[0]
+  const count = layout.cells.length
+  const charts = useMemo(
+    () => Array.from({ length: count }, (_, i) => settings.charts[i] ?? settings.charts[0]),
+    [settings.charts, count],
+  )
+  const active = Math.min(settings.active, count - 1)
+  const chart = charts[active]
+  const product = getProduct(catalog, chart.symbol)
+  const interval = parseInterval(chart.interval)
+
+  const engines = useRef(new Map<number, ChartEngine>())
+  const [engineVersion, setEngineVersion] = useState(0)
+  const panels = useRef<(PanelHandle | null)[]>([])
+  const hovered = useRef<number | null>(null)
+  const [autoScales, setAutoScales] = useState<Record<number, boolean>>({})
   const [search, setSearch] = useState<SearchState | null>(null)
   const [intervalText, setIntervalText] = useState<string | null>(null)
+  const [indicatorsOpen, setIndicatorsOpen] = useState(false)
+  const [editing, setEditing] = useState<{ chart: number; id: string } | null>(null)
 
-  useEffect(() => {
-    const e = new ChartEngine(hostRef.current!)
-    const offs = [e.on('legend', setLegend), e.on('autoScale', setAutoScale), e.on('realtime', setRealtime)]
-    setEngine(e)
-    if (import.meta.env.DEV) Object.assign(window, { engine: e })
-    return () => {
-      offs.forEach((off) => off())
-      e.destroy()
-    }
+  const onEngine = useCallback((index: number, engine: ChartEngine | null) => {
+    if (engine) engines.current.set(index, engine)
+    else engines.current.delete(index)
+    setEngineVersion((v) => v + 1)
   }, [])
-  useEffect(() => engine?.setChartType(settings.chartType), [engine, settings.chartType])
-  useEffect(() => engine?.setPriceMode(settings.priceMode), [engine, settings.priceMode])
-  useEffect(() => engine?.setCursor(settings.cursor), [engine, settings.cursor])
+  const onAutoScale = useCallback((index: number, on: boolean) => setAutoScales((a) => ({ ...a, [index]: on })), [])
 
-  const { status, showRange } = useChartData(engine, product, settings.interval)
-
-  const quoteIds = useMemo(
-    () => [...new Set([...settings.watchlist, settings.symbol])],
-    [settings.watchlist, settings.symbol],
+  /** Changes one chart; with symbol or interval sync on, every chart in the layout follows. */
+  const updateChart = useCallback(
+    (index: number, patch: Partial<ChartState>) =>
+      update((s) => {
+        const n = (LAYOUT_BY_ID.get(s.layout) ?? LAYOUTS[0]).cells.length
+        const next = [...s.charts]
+        next[index] = { ...(next[index] ?? next[0]), ...patch }
+        for (let k = 0; k < n; k++) {
+          if (k === index || !next[k]) continue
+          if (patch.symbol && s.sync.symbol) next[k] = { ...next[k], symbol: patch.symbol }
+          if (patch.interval && s.sync.interval) next[k] = { ...next[k], interval: patch.interval }
+        }
+        return { charts: next }
+      }),
+    [update],
   )
+
+  const setIndicators = useCallback(
+    (index: number, fn: (list: IndicatorInstance[]) => IndicatorInstance[]) =>
+      update((s) => {
+        const next = [...s.charts]
+        next[index] = { ...next[index], indicators: fn(next[index].indicators) }
+        return { charts: next }
+      }),
+    [update],
+  )
+
+  const pickLayout = (id: string) =>
+    update((s) => {
+      const n = (LAYOUT_BY_ID.get(id) ?? LAYOUTS[0]).cells.length
+      const next = [...s.charts]
+      // New charts start as a copy of the active one, as on TradingView.
+      const source = next[Math.min(s.active, next.length - 1)]
+      while (next.length < n) next.push(newChart({ ...source, indicators: cloneIndicators(source.indicators) }))
+      return { layout: id, charts: next, active: Math.min(s.active, n - 1) }
+    })
+
+  // Crosshair and time sync between the charts of the layout.
+  const symbolsKey = charts.map((c) => c.symbol).join(',')
+  useEffect(() => {
+    const list = [...engines.current.entries()].filter(([i]) => i < count)
+    const symbols = symbolsKey.split(',')
+    const offs = list.flatMap(([i, e]) => [
+      e.on('crosshair', ({ time, price }) => {
+        if (!settings.sync.crosshair) return
+        for (const [j, other] of list)
+          if (j !== i) other.syncCrosshair(time, symbols[j] === symbols[i] ? price : null)
+      }),
+      e.on('timeRange', ({ time }) => {
+        // Only the chart under the mouse leads; the others' echoes and live-bar shifts are ignored.
+        if (!settings.sync.time || hovered.current !== i) return
+        for (const [j, other] of list) if (j !== i) other.alignRightEdge(time)
+      }),
+    ])
+    return () => offs.forEach((off) => off())
+  }, [engineVersion, count, settings.sync, symbolsKey])
+
+  const quoteIds = useMemo(() => [...new Set([...settings.watchlist, chart.symbol])], [settings.watchlist, chart.symbol])
   const quotes = useQuotes(quoteIds)
 
   // TradingView's tab title: "BTCUSD 80,019.66 ▼ −0.04%".
-  const quote = quotes[settings.symbol]
+  const quote = quotes[chart.symbol]
   useEffect(() => {
     if (!quote || !Number.isFinite(quote.price)) {
       document.title = `${product.ticker} — CryptoAnal`
@@ -69,18 +133,21 @@ export function App() {
     (p: Product) => {
       if (search?.mode === 'watchlist') {
         if (!settings.watchlist.includes(p.id)) update({ watchlist: [...settings.watchlist, p.id] })
-      } else update({ symbol: p.id })
+      } else updateChart(active, { symbol: p.id })
       setSearch(null)
     },
-    [search, settings.watchlist, update],
+    [search, settings.watchlist, update, updateChart, active],
   )
 
   const pickRange = (r: RangePreset) => {
-    if (r.interval !== settings.interval) update({ interval: r.interval })
-    showRange(r.from(), r.interval, settings.symbol)
+    if (r.interval !== chart.interval) updateChart(active, { interval: r.interval })
+    panels.current[active]?.showRange(r.from(), r.interval)
   }
 
+  const activeEngine = () => engines.current.get(active)
+
   const screenshot = () => {
+    const engine = activeEngine()
     if (!engine) return
     const canvas = engine.screenshot(`${describe(catalog, product)} · ${interval?.label ?? ''} · Coinbase`)
     canvas.toBlob((blob) => {
@@ -100,16 +167,21 @@ export function App() {
   }
 
   // TradingView's keyboard: type a number for the interval box, letters for symbol search,
-  // arrows to scroll and zoom, Alt+R to reset the chart.
+  // arrows to scroll and zoom, Alt+R to reset the chart. Keys act on the active chart.
+  const modalOpen = Boolean(search || intervalText !== null || indicatorsOpen || editing)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
-      if (target.closest('input, textarea, [contenteditable]') || search || intervalText !== null) return
+      if (target.closest('input, textarea, select, [contenteditable]') || modalOpen) return
+      const engine = engines.current.get(active)
       if (e.altKey && e.code === 'KeyR') {
         e.preventDefault()
         engine?.reset()
       } else if (e.ctrlKey || e.metaKey || e.altKey) return
-      else if (/^[0-9]$/.test(e.key)) {
+      else if (e.key === '/') {
+        e.preventDefault()
+        setIndicatorsOpen(true)
+      } else if (/^[0-9]$/.test(e.key)) {
         e.preventDefault()
         setIntervalText(e.key)
       } else if (/^[a-zA-Z]$/.test(e.key)) {
@@ -122,7 +194,9 @@ export function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [engine, search, intervalText])
+  }, [active, modalOpen])
+
+  const editingInst = editing ? charts[editing.chart]?.indicators.find((i) => i.id === editing.id) : undefined
 
   return (
     <div
@@ -133,43 +207,77 @@ export function App() {
     >
       <Header
         product={product}
-        interval={settings.interval}
+        interval={chart.interval}
         favorites={settings.favorites}
-        chartType={settings.chartType}
+        chartType={chart.chartType}
+        layout={layout.id}
+        sync={settings.sync}
         onSymbolSearch={() => setSearch({ initial: '', mode: 'symbol' })}
-        onInterval={(id) => update({ interval: id })}
+        onInterval={(id) => updateChart(active, { interval: id })}
         onFavorites={(favorites) => update({ favorites })}
-        onChartType={(chartType) => update({ chartType })}
+        onChartType={(chartType) => updateChart(active, { chartType })}
+        onIndicators={() => setIndicatorsOpen(true)}
+        onLayout={pickLayout}
+        onSync={(sync) => update({ sync })}
         onFullscreen={toggleFullscreen}
         onScreenshot={screenshot}
       />
       <LeftToolbar cursor={settings.cursor} onCursor={(cursor) => update({ cursor })} />
       <main className="center">
-        <div className="chart-wrap">
-          <div className="chart-host" ref={hostRef} />
-          <Legend product={product} description={describe(catalog, product)} interval={interval} state={legend} />
-          {!realtime && (
-            <button className="realtime-btn" title="Scroll to the most recent bar" onClick={() => engine?.scrollToRealtime()}>
-              <RealtimeIcon />
-            </button>
-          )}
-          {status === 'error' && <div className="chart-toast">Can't reach Coinbase — retrying…</div>}
+        <div
+          className="layout-grid"
+          style={{
+            gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`,
+          }}
+        >
+          {layout.cells.map((cell, i) => (
+            <div
+              key={i}
+              className="layout-cell"
+              style={{ gridArea: cell.join(' / ') }}
+              onPointerEnter={() => (hovered.current = i)}
+              onPointerMoveCapture={() => (hovered.current = i)}
+              onWheelCapture={() => (hovered.current = i)}
+              onPointerLeave={() => hovered.current === i && (hovered.current = null)}
+            >
+              <ChartPanel
+                ref={(h) => {
+                  panels.current[i] = h
+                }}
+                index={i}
+                state={charts[i]}
+                catalog={catalog}
+                cursor={settings.cursor}
+                active={i === active}
+                outline={count > 1}
+                onActivate={(index) => index !== settings.active && update({ active: index })}
+                onEngine={onEngine}
+                onAutoScale={onAutoScale}
+                onToggle={(id) =>
+                  setIndicators(i, (list) => list.map((x) => (x.id === id ? { ...x, hidden: !x.hidden } : x)))
+                }
+                onSettings={(id) => setEditing({ chart: i, id })}
+                onRemove={(id) => setIndicators(i, (list) => list.filter((x) => x.id !== id))}
+              />
+            </div>
+          ))}
         </div>
         <BottomBar
-          priceMode={settings.priceMode}
-          autoScale={autoScale}
+          priceMode={chart.priceMode}
+          autoScale={autoScales[active] ?? true}
           onRange={pickRange}
-          onPriceMode={(priceMode) => update({ priceMode })}
-          onAutoScale={(on) => engine?.setAutoScale(on)}
+          onPriceMode={(priceMode) => updateChart(active, { priceMode })}
+          onAutoScale={(on) => activeEngine()?.setAutoScale(on)}
         />
       </main>
       {settings.watchlistOpen && (
         <Watchlist
           catalog={catalog}
           symbols={settings.watchlist}
-          active={settings.symbol}
+          active={chart.symbol}
           quotes={quotes}
-          onSelect={(symbol) => update({ symbol })}
+          onSelect={(symbol) => updateChart(active, { symbol })}
           onRemove={(id) => update({ watchlist: settings.watchlist.filter((s) => s !== id) })}
           onAdd={() => setSearch({ initial: '', mode: 'watchlist' })}
         />
@@ -191,10 +299,23 @@ export function App() {
         <IntervalDialog
           initial={intervalText}
           onPick={(id) => {
-            update({ interval: id })
+            updateChart(active, { interval: id })
             setIntervalText(null)
           }}
           onClose={() => setIntervalText(null)}
+        />
+      )}
+      {indicatorsOpen && (
+        <IndicatorsDialog
+          onAdd={(type) => setIndicators(active, (list) => [...list, createInstance(type)])}
+          onClose={() => setIndicatorsOpen(false)}
+        />
+      )}
+      {editing && editingInst && (
+        <IndicatorSettings
+          inst={editingInst}
+          onChange={(inst) => setIndicators(editing.chart, (list) => list.map((x) => (x.id === inst.id ? inst : x)))}
+          onClose={() => setEditing(null)}
         />
       )}
     </div>

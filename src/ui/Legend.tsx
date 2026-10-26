@@ -1,18 +1,67 @@
-import type { LegendState } from '../chart/ChartEngine'
+import type { ChartEngine, LegendState } from '../chart/ChartEngine'
 import type { IntervalDef } from '../data/intervals'
 import type { Product } from '../data/types'
-import { formatChange, formatPercent, formatPrice, formatVolume } from '../format'
+import { formatChange, formatPercent, formatPrice } from '../format'
+import { INDICATOR_BY_TYPE, instanceTitle } from '../indicators/catalog'
+import type { IndicatorInstance } from '../indicators/types'
 import { CoinLogo } from './common'
+import { CloseIcon, EyeIcon, GearIcon } from './icons'
 
-interface Props {
+export interface IndicatorActions {
+  onToggle: (id: string) => void
+  onSettings: (id: string) => void
+  onRemove: (id: string) => void
+}
+
+interface RowProps extends IndicatorActions {
+  inst: IndicatorInstance
+  product: Product
+  engine: ChartEngine | null
+  state: LegendState | null
+}
+
+/** One indicator in the legend: title, values, and TradingView's hover buttons. */
+export function IndicatorRow({ inst, product, engine, state, onToggle, onSettings, onRemove }: RowProps) {
+  const def = INDICATOR_BY_TYPE.get(inst.type)
+  if (!def) return null
+  const title = def.type === 'volume' ? `Vol · ${product.base}` : instanceTitle(def, inst)
+  const values = engine && state && !inst.hidden ? engine.indicatorValues(inst.id, state.index) : []
+  return (
+    <div className={`legend-row ind-row${inst.hidden ? ' off' : ''}`} onDoubleClick={() => onSettings(inst.id)}>
+      <span className="ind-title">{title}</span>
+      <span className="ind-values">
+        {values.map((v) => (
+          <b key={v.key} style={{ color: v.color }}>
+            {v.text}
+          </b>
+        ))}
+      </span>
+      <span className="ind-actions">
+        <button title={inst.hidden ? 'Show' : 'Hide'} onClick={() => onToggle(inst.id)}>
+          <EyeIcon off={inst.hidden} />
+        </button>
+        <button title="Settings" onClick={() => onSettings(inst.id)}>
+          <GearIcon />
+        </button>
+        <button title="Remove" onClick={() => onRemove(inst.id)}>
+          <CloseIcon size={18} />
+        </button>
+      </span>
+    </div>
+  )
+}
+
+interface MainProps extends IndicatorActions {
   product: Product
   description: string
   interval: IntervalDef | null
   state: LegendState | null
+  engine: ChartEngine | null
+  overlays: IndicatorInstance[]
 }
 
-/** The top-left legend: name, interval, exchange, then OHLC and change, then volume. */
-export function Legend({ product, description, interval, state }: Props) {
+/** The price pane's legend: name, interval, exchange, OHLC and change, then its overlays. */
+export function MainLegend({ product, description, interval, state, engine, overlays, ...actions }: MainProps) {
   const bar = state?.bar
   const p = product.precision
   const dir = bar ? (bar.close >= bar.open ? 'up' : 'down') : ''
@@ -51,10 +100,9 @@ export function Legend({ product, description, interval, state }: Props) {
           </span>
         )}
       </div>
-      <div className="legend-row study">
-        <span className="legend-study">Vol · {product.base}</span>
-        {bar && <b className={dir}>{formatVolume(bar.volume, true)}</b>}
-      </div>
+      {overlays.map((inst) => (
+        <IndicatorRow key={inst.id} inst={inst} product={product} engine={engine} state={state} {...actions} />
+      ))}
     </div>
   )
 }
