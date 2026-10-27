@@ -93,7 +93,7 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
   const overlays = state.indicators.filter((i) => INDICATOR_BY_TYPE.get(i.type)?.overlay)
   const panesBelow = state.indicators.filter((i) => {
     const def = INDICATOR_BY_TYPE.get(i.type)
-    return def && !def.overlay
+    return def && !def.overlay && !i.floating?.open
   })
   const actions = { onToggle: props.onToggle, onSettings: props.onSettings, onRemove: props.onRemove, onFloat: props.onFloat }
   const floating = state.indicators.filter((i) => i.floating?.open && canFloat(INDICATOR_BY_TYPE.get(i.type)))

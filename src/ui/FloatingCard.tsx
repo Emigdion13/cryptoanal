@@ -14,7 +14,7 @@ import {
   type FloatLine,
   type FloatModel,
 } from './floatingModel'
-import { CloseIcon, GearIcon, RealtimeIcon } from './icons'
+import { GearIcon, RealtimeIcon } from './icons'
 
 /** The card's width, and where it docks: right of the legend, clear of the price axis. */
 export const CARD_WIDTH = 288
@@ -42,11 +42,12 @@ interface Props {
 }
 
 /**
- * A floating window onto one oscillator, as V2's: a zoomed mini chart of the last bars of the same
- * values its pane plots, the numbers for the bar the crosshair is on, and the call the indicator is
- * read for. Drag it by the header, minimize it to one line, ± the bars it holds, drag the plot (or
- * ‹ ›) to walk back through history and ⏭ back to the live bar. Where it sits, its size and its
- * minimized state are saved with the layout.
+ * A floating window onto one oscillator, as V2's: a zoomed mini chart of the last bars of the
+ * values its pane would plot, the numbers for the bar the crosshair is on, and the call the
+ * indicator is read for. It replaces the pane while it is open — one or the other, never both — and
+ * docking it puts the pane back. Drag it by the header, minimize it to one line, ± the bars it
+ * holds, drag the plot (or ‹ ›) to walk back through history and ⏭ back to the live bar. Where it
+ * sits, its size and its minimized state are saved with the layout.
  */
 export function FloatingCard({ inst, def, engine, legend, title, context, intervalSeconds, dockIndex, onChange, onSettings }: Props) {
   const state = inst.floating ?? { open: true }
@@ -148,7 +149,7 @@ export function FloatingCard({ inst, def, engine, legend, title, context, interv
           <GearIcon size={15} />
         </button>
         {state.x !== undefined && (
-          <button title="Back to its docked spot" onClick={() => onChange({ x: undefined, y: undefined })}>
+          <button title="Back to its corner" onClick={() => onChange({ x: undefined, y: undefined })}>
             <DockIcon />
           </button>
         )}
@@ -161,8 +162,8 @@ export function FloatingCard({ inst, def, engine, legend, title, context, interv
         >
           <MinIcon plus={minimized} />
         </button>
-        <button className="is-close" title="Close the window" onClick={() => onChange({ open: false })}>
-          <CloseIcon size={16} />
+        <button title="Dock back into its pane" onClick={() => onChange({ open: false })}>
+          <PaneIcon />
         </button>
       </header>
 
@@ -492,6 +493,15 @@ function timeLabel(time: number, intervalSeconds: number | null): string {
 const DockIcon = () => (
   <svg width={14} height={14} viewBox="0 0 14 14" fill="none" stroke="currentColor">
     <path d="M3 7a4 4 0 1 0 1.2-2.9M3 2.5v2.2h2.2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+/** A chart with a pane under it, the pane filled: back into the pane. */
+const PaneIcon = () => (
+  <svg width={14} height={14} viewBox="0 0 14 14" fill="none" stroke="currentColor">
+    <rect x="1.5" y="1.5" width="11" height="11" rx="1" />
+    <path d="M1.5 8.5h11" />
+    <rect x="3" y="10" width="8" height="1.5" fill="currentColor" stroke="none" />
   </svg>
 )
 

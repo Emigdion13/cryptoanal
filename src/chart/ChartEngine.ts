@@ -106,6 +106,8 @@ const DEFAULT_SPACING = 6
 const LEVEL_STYLE = { solid: LineStyle.Solid, dashed: LineStyle.Dashed, dotted: LineStyle.Dotted }
 
 const asTime = (t: number) => t as UTCTimestamp
+/** Shown in its floating window rather than in a pane: one or the other, never both. */
+const floats = (inst: IndicatorInstance) => !!inst.floating?.open
 
 /** A translucent color as it looks over the black pane, made opaque for an axis label. */
 function opaqueOnBlack(color: string): string {
@@ -320,7 +322,7 @@ export class ChartEngine {
   /** Shows these indicators, in order: overlays on the price pane, the rest in panes below. */
   setIndicators(list: IndicatorInstance[]) {
     this.instances = list
-    const structure = list.map((i) => `${i.id}:${i.type}`).join('|')
+    const structure = list.map((i) => `${i.id}:${i.type}:${floats(i)}`).join('|')
     if (structure !== this.structure) {
       this.structure = structure
       this.rebuildIndicators()
@@ -469,8 +471,10 @@ export class ChartEngine {
     for (const inst of this.instances) {
       const def = INDICATOR_BY_TYPE.get(inst.type)
       if (!def) continue
-      const pane = def.overlay ? 0 : nextPane++
-      if (!def.overlay) this.paneIds.push(inst.id)
+      // In its floating window instead of a pane: computed for the window, nothing drawn here.
+      const floating = !def.overlay && floats(inst)
+      const pane = def.overlay ? 0 : floating ? -1 : nextPane++
+      if (!def.overlay && !floating) this.paneIds.push(inst.id)
       const rt: Runtime = {
         inst,
         def,
@@ -486,6 +490,11 @@ export class ChartEngine {
         count: 0,
         inputsKey: JSON.stringify(inst.inputs),
         stylesKey: JSON.stringify(inst.styles) + inst.hidden,
+      }
+      if (floating) {
+        this.runtimes.push(rt)
+        this.computeRuntime(rt)
+        continue
       }
       for (const plot of def.plots) {
         // Legend-only values have no series of their own.

@@ -46,7 +46,7 @@ export function IndicatorRow({ inst, product, engine, state, onToggle, onSetting
         {canFloat(def) && (
           <button
             className={inst.floating?.open ? 'on' : undefined}
-            title={inst.floating?.open ? 'Close the floating window' : 'Floating window'}
+            title="Float in a window (instead of this pane)"
             onClick={() => onFloat(inst.id)}
           >
             <FloatIcon />
