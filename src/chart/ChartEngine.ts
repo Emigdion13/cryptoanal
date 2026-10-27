@@ -263,7 +263,9 @@ export class ChartEngine {
     this.precision = precision
     this.main?.applyOptions({ priceFormat: this.priceFormat() })
     for (const rt of this.runtimes)
-      if (rt.def.format === 'price') for (const s of rt.series.values()) s.applyOptions({ priceFormat: this.priceFormat() })
+      // A script with its own precision (TUX: 4 decimals) keeps it.
+      if (rt.def.format === 'price' && rt.def.precision === undefined)
+        for (const s of rt.series.values()) s.applyOptions({ priceFormat: this.priceFormat() })
   }
 
   /**
@@ -427,18 +429,21 @@ export class ChartEngine {
       .map((p) => {
         const v = rt.out.values[p.key]?.[index]
         const color = rt.out.colors?.[p.key]?.[index] ?? rt.inst.styles[p.key]?.color ?? p.color
-        return { key: p.key, text: Number.isFinite(v) ? this.formatValue(rt.def, v) : 'n/a', color: opaqueOnBlack(color) }
+        // TradingView prints na as ∅.
+        return { key: p.key, text: Number.isFinite(v) ? this.formatValue(rt.def, v) : '∅', color: opaqueOnBlack(color) }
       })
   }
 
   private formatValue(def: IndicatorDef, v: number): string {
     if (def.format === 'volume') return formatVolume(v, true)
-    if (def.format === 'price') return formatPrice(v, this.precision)
+    if (def.format === 'price') return formatPrice(v, def.precision ?? this.precision)
     return formatPrice(v, 2)
   }
 
   private indicatorFormat(def: IndicatorDef) {
     if (def.format === 'volume') return { type: 'volume' as const }
+    if (def.format === 'price' && def.precision !== undefined)
+      return { type: 'price' as const, precision: def.precision, minMove: 10 ** -def.precision }
     if (def.format === 'price') return this.priceFormat()
     return { type: 'price' as const, precision: 2, minMove: 0.01 }
   }
@@ -476,6 +481,8 @@ export class ChartEngine {
         stylesKey: JSON.stringify(inst.styles) + inst.hidden,
       }
       for (const plot of def.plots) {
+        // Legend-only values have no series of their own.
+        if (plot.kind === 'value') continue
         const style = inst.styles[plot.key]
         const common = {
           priceScaleId: def.ownScale ? `ind-${inst.id}` : 'right',

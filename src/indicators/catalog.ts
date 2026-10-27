@@ -2,6 +2,7 @@ import type { Candle } from '../data/types'
 import * as ta from './math'
 import type { IndicatorDef, IndicatorInstance, InputDef, InputValue, LevelDef, PlotStyle } from './types'
 import { kalshiStrike } from './kalshiStrike'
+import { tuxEmaScalper } from './tuxDef'
 import { cmUltMacd, msbZigZag, rsiDivergence, smartMoneyConcepts, tmoLux, tmoScalper, withDivergences } from './v2/defs'
 
 // TradingView's built-in palette.
@@ -621,6 +622,7 @@ export const INDICATORS: IndicatorDef[] = [
   msbZigZag,
   smartMoneyConcepts,
   kalshiStrike,
+  tuxEmaScalper,
 ]
 
 export const INDICATOR_BY_TYPE = new Map(INDICATORS.map((d) => [d.type, d]))

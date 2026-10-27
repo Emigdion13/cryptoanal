@@ -179,9 +179,57 @@ export class DrawingPrimitive implements IPanePrimitive<Time>, ISeriesPrimitive<
             }
             ctx.closePath()
             ctx.fill()
+          } else if (d.type === 'shape') {
+            if (!this.visible(d.x, d.x)) continue
+            const x = this.x(d.x),
+              y = this.y(d.y)
+            if (x === null || y === null) continue
+            this.drawShape(ctx, d, x, y)
           }
         }
       })
     },
+  }
+
+  /**
+   * TradingView's marks, pointing at the bar from `offset` pixels away: a triangle (plotshape
+   * triangleup/down), a small arrow with its text beyond it (arrowup/down), or plotarrow's tall
+   * arrow (55 px, between its 50–60 px heights).
+   */
+  private drawShape(ctx: CanvasRenderingContext2D, d: Extract<Drawing, { type: 'shape' }>, x: number, y: number) {
+    const below = d.shape === 'triangleUp' || d.shape === 'arrowUp' || d.shape === 'plotArrowUp'
+    const dir = below ? 1 : -1 // away from the bar
+    const tip = y + dir * d.offset
+    ctx.fillStyle = d.color
+    ctx.strokeStyle = d.color
+    ctx.beginPath()
+    if (d.shape === 'triangleUp' || d.shape === 'triangleDown') {
+      ctx.moveTo(x, tip)
+      ctx.lineTo(x + 4.5, tip + dir * 7)
+      ctx.lineTo(x - 4.5, tip + dir * 7)
+      ctx.closePath()
+      ctx.fill()
+      return
+    }
+    const plotArrow = d.shape === 'plotArrowUp' || d.shape === 'plotArrowDown'
+    const head = plotArrow ? 9 : 5
+    const half = plotArrow ? 5 : 4
+    const length = plotArrow ? 55 : 12
+    const shaft = plotArrow ? 1.5 : 1
+    ctx.moveTo(x, tip)
+    ctx.lineTo(x + half, tip + dir * head)
+    ctx.lineTo(x + shaft, tip + dir * head)
+    ctx.lineTo(x + shaft, tip + dir * length)
+    ctx.lineTo(x - shaft, tip + dir * length)
+    ctx.lineTo(x - shaft, tip + dir * head)
+    ctx.lineTo(x - half, tip + dir * head)
+    ctx.closePath()
+    ctx.fill()
+    if (d.text) {
+      ctx.font = `11px ${theme.font}`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(d.text, x, tip + dir * (length + 9))
+    }
   }
 }

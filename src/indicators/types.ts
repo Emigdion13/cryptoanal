@@ -20,7 +20,8 @@ export interface InputDef {
   optionLabels?: Record<string, string>
 }
 
-export type PlotKind = 'line' | 'histogram' | 'dots' | 'step'
+/** 'value': shown in the legend only (a plotshape's 0/1): the indicator draws it as shapes. */
+export type PlotKind = 'line' | 'histogram' | 'dots' | 'step' | 'value'
 
 export interface PlotDef {
   key: string
@@ -99,6 +100,19 @@ export type Drawing =
       bg?: string
     }
   | { type: 'triangle'; x: number; y: number; dir: 'up' | 'down'; color: string; size: number }
+  | {
+      /**
+       * Pine's marks, anchored to a bar's high or low: plotshape triangles and arrows (with
+       * their text) and plotarrow's tall entry arrows. `offset` is pixels away from the bar.
+       */
+      type: 'shape'
+      shape: 'triangleUp' | 'triangleDown' | 'arrowUp' | 'arrowDown' | 'plotArrowUp' | 'plotArrowDown'
+      x: number
+      y: number
+      offset: number
+      color: string
+      text?: string
+    }
 
 /** What an indicator can read besides the chart's own bars. */
 export interface ComputeContext {
@@ -138,6 +152,8 @@ export interface IndicatorDef {
   ownScale?: boolean
   /** How values print: like prices, as volume, or with two decimals. */
   format: 'price' | 'volume' | 'fixed'
+  /** Decimals for 'price' values, when the script sets its own (Pine's precision). */
+  precision?: number
   inputs: InputDef[]
   plots: PlotDef[]
   levels?: LevelDef[]
