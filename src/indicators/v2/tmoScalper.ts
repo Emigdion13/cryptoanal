@@ -1,13 +1,13 @@
 /**
  * L&L Capital's TMO Scalper (the MTF scalping variant of Mobius's True Momentum Oscillator),
- * ported from btcAnalyzerV2 (src/lib/tmo-scalper.ts): three timeframes of TMO main/signal
+ * ported from btcAnalyzerV2 (src/lib/tmo-scalper.ts, as of 4fad720): three timeframes of TMO main/signal
  * pairs, gated cross arrows, and the extreme-only arrows. Legend (1, 5, 30, 14, 5, 3, 3, 2, 9, −9).
  */
 import type { Candle } from '../../data/types'
 
-/** Original Pine colors. */
+/** Original Pine colors; TMO 1 crosses wear the published "TMO 1 Up / Down Signal" pair. */
 export const TMO_COLORS = {
-  tmo1Bull: '#0de50d',
+  tmo1Bull: '#27c22e',
   bear: '#ff0000',
   bull: '#27c22e',
   tmo2Bull: '#006400',
@@ -21,6 +21,12 @@ export const TMO_COLORS = {
 export const TMO_DISPLAY_SCALE = 15
 /** The published hline levels ±15. */
 export const TMO_CUTOFF = 15
+/**
+ * The published OB/OS fills run from the ±15 cutoffs to the hidden ±10 "OB Line" / "OS Line"
+ * hlines; every fill (those two and each wheel's Main-to-Signal cloud) is color.new(…, 75).
+ */
+export const TMO_FILL_EDGE = 10
+export const TMO_FILL_OPACITY = 0.25
 
 /** The published TimeFrame options Coinbase data can build, with their length in seconds. */
 export const TMO_RESOLUTIONS: Record<string, number> = {
@@ -89,16 +95,25 @@ export function tmoNative(candles: readonly Candle[], s: TmoScalperSettings) {
 }
 
 /**
- * request.security(gaps_off, lookahead_off): a bigger timeframe's value is the one of the bucket
- * the chart bar sits in (flat between bucket starts); a smaller one reports its latest bar at or
- * before the chart bar.
+ * request.security(gaps_off, lookahead_off) as TradingView draws it on a loaded chart: a bigger
+ * timeframe's bucket shows only from the chart bar that closes it (bars before still show the
+ * previous bucket), so the line steps on each bucket's last bar; the newest bar shows its bucket
+ * as it stands, moving tick by tick. A smaller timeframe reports its latest bar at or before the
+ * chart bar.
  */
 function project(native: ReturnType<typeof tmoNative>, chart: readonly Candle[], tfSeconds: number, chartSeconds: number) {
   const main: Values = []
   const signal: Values = []
   let cursor = -1
-  for (const candle of chart) {
-    const boundary = tfSeconds >= chartSeconds ? bucket(candle.time, tfSeconds) : candle.time
+  for (let index = 0; index < chart.length; index++) {
+    const candle = chart[index]
+    let boundary = candle.time
+    if (tfSeconds >= chartSeconds) {
+      const start = bucket(candle.time, tfSeconds)
+      const closesBucket = candle.time + chartSeconds >= start + tfSeconds
+      // start − 1 admits only native bars that opened before this bucket: the previous one.
+      boundary = closesBucket || index === chart.length - 1 ? start : start - 1
+    }
     while (cursor + 1 < native.times.length && native.times[cursor + 1] <= boundary) cursor++
     main.push(cursor < 0 ? null : native.main[cursor])
     signal.push(cursor < 0 ? null : native.signal[cursor])

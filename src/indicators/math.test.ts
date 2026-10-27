@@ -60,7 +60,8 @@ describe('catalog', () => {
       for (const plot of def.plots) {
         const values = out.values[plot.key]
         expect(values, `${def.type}.${plot.key}`).toHaveLength(bars.length)
-        expect(values.some(Number.isFinite), `${def.type}.${plot.key} has values`).toBe(true)
+        // Signal dots (divergence circles, crosses) are rare by nature; lines must have values.
+        if (plot.kind !== 'dots') expect(values.some(Number.isFinite), `${def.type}.${plot.key} has values`).toBe(true)
       }
     }
   })

@@ -4,9 +4,16 @@ import { calculateCmMacd, CM_COLORS, CM_RESOLUTIONS, cmCrosses, cmHistogramColor
 import { asNullable, detectMacdDivergences, DIVERGENCE_INPUTS, divergenceDrawings, divergenceSettings } from './divergence'
 import { calculateMsbZigZag } from './msbZigZag'
 import { SMC_DEFAULTS, smcDrawings, type SmcSettings } from './smc'
-import { calculateTmoScalper, TMO_COLORS, TMO_CUTOFF, TMO_RESOLUTIONS } from './tmoScalper'
+import { calculateTmoScalper, TMO_COLORS, TMO_CUTOFF, TMO_FILL_EDGE, TMO_FILL_OPACITY, TMO_RESOLUTIONS } from './tmoScalper'
+import { calculateTmoLux, TMO_LUX_COLORS } from './tmoLux'
+import { rsi as wilderRsi, source as sourceValues, type Source } from '../math'
 
 const n = (v: InputValue) => Math.max(1, Math.round(Number(v)))
+/** "#rrggbb" with an opacity. */
+const alpha = (hex: string, a: number) => {
+  const c = parseInt(hex.slice(1), 16)
+  return `rgba(${c >> 16}, ${(c >> 8) & 255}, ${c & 255}, ${a})`
+}
 const toNaN = (values: (number | null)[]) => values.map((v) => (v === null ? NaN : v))
 
 /** "1" → "1m", "60" → "1h", "D" stays: how TradingView names a resolution in a menu. */
@@ -144,9 +151,20 @@ export const tmoScalper: IndicatorDef = {
     { key: 'signal3', title: 'TMO 3 Signal', kind: 'line', color: TMO_COLORS.tmo2Bull, color2: TMO_COLORS.tmo2Bear },
   ],
   levels: [
-    { title: 'OB Cutoff Line', value: TMO_CUTOFF, color: TMO_COLORS.bear, style: 'dashed' },
+    { title: 'OB Cutoff Line', value: TMO_CUTOFF, color: TMO_COLORS.bear, style: 'solid' },
     { title: 'Zero Line', value: 0, color: '#434651', style: 'solid' },
-    { title: 'OS Cutoff Line', value: -TMO_CUTOFF, color: TMO_COLORS.bull, style: 'dashed' },
+    { title: 'OS Cutoff Line', value: -TMO_CUTOFF, color: TMO_COLORS.bull, style: 'solid' },
+  ],
+  // The OB/OS zones (±15 to ±10) and each wheel's Main-to-Signal cloud, at 75% transparency.
+  fills: [
+    { from: TMO_CUTOFF, to: TMO_FILL_EDGE, color: alpha(TMO_COLORS.bear, TMO_FILL_OPACITY) },
+    { from: -TMO_FILL_EDGE, to: -TMO_CUTOFF, color: alpha(TMO_COLORS.bull, TMO_FILL_OPACITY) },
+    ...[3, 2, 1].map((k) => ({
+      from: `main${k}`,
+      to: `signal${k}`,
+      color: alpha(TMO_COLORS.bull, TMO_FILL_OPACITY),
+      colorBelow: alpha(TMO_COLORS.bear, TMO_FILL_OPACITY),
+    })),
   ],
   feeds: (i, chart) =>
     [i.tf1, i.tf2, i.tf3].map((k) => TMO_RESOLUTIONS[String(k)]).filter((s) => s && s !== chart.seconds),
@@ -284,4 +302,86 @@ export const smartMoneyConcepts: IndicatorDef = {
   ],
   plots: [],
   compute: (bars, i) => ({ values: {}, drawings: smcDrawings(bars, { ...SMC_DEFAULTS, ...(i as Partial<SmcSettings>) }) }),
+}
+
+// ── TMO [LuxAlgo] ───────────────────────────────────────────────────────────
+
+export const tmoLux: IndicatorDef = {
+  type: 'tmoLux',
+  name: 'Triangular Momentum Oscillator & Real Time Divergences [LuxAlgo]',
+  short: 'TMO [LuxAlgo]',
+  category: 'Oscillators',
+  overlay: false,
+  format: 'price',
+  inputs: [
+    { key: 'length', label: 'Length', type: 'int', default: 7, min: 1, max: 1000 },
+    { key: 'source', label: 'Source', type: 'source', default: 'close' },
+    { key: 'showLines', label: 'Show lines', type: 'bool', default: true },
+    { key: 'correlationColors', label: 'Color based on price/oscillator correlation', type: 'bool', default: false },
+  ],
+  plots: [
+    { key: 'osc', title: 'Osc', kind: 'histogram', color: TMO_LUX_COLORS.up },
+    { key: 'bull', title: 'Bullish Circle', kind: 'dots', color: TMO_LUX_COLORS.up, width: 3 },
+    { key: 'bear', title: 'Bearish Circle', kind: 'dots', color: TMO_LUX_COLORS.down, width: 3 },
+  ],
+  compute: (bars, i) => {
+    const v = calculateTmoLux(bars, sourceValues(bars, i.source as Source), n(i.length), Boolean(i.showLines), Boolean(i.correlationColors))
+    const drawings: Drawing[] = []
+    for (const line of v.lines)
+      drawings.push({
+        type: 'line',
+        x1: line.fromIndex,
+        y1: line.fromValue,
+        x2: line.toIndex,
+        y2: line.toValue,
+        color: line.kind === 'bull' ? TMO_LUX_COLORS.up : TMO_LUX_COLORS.down,
+      })
+    // The script's Buy / Sell labels, under a bullish turn and over a bearish one.
+    v.osc.forEach((y, x) => {
+      if (y === null || (!v.bull[x] && !v.bear[x])) return
+      const bull = v.bull[x]
+      drawings.push({
+        type: 'text',
+        x,
+        y,
+        text: bull ? 'Buy' : 'Sell',
+        color: '#ffffff',
+        bg: bull ? TMO_LUX_COLORS.up : TMO_LUX_COLORS.down,
+        size: 9,
+        dy: bull ? 17 : -17,
+      })
+    })
+    return {
+      values: {
+        osc: toNaN(v.osc),
+        bull: toNaN(v.osc.map((y, k) => (v.bull[k] ? y : null))),
+        bear: toNaN(v.osc.map((y, k) => (v.bear[k] ? y : null))),
+      },
+      colors: { osc: v.colors },
+      drawings,
+    }
+  },
+}
+
+// ── RSI Divergence ──────────────────────────────────────────────────────────
+
+export const rsiDivergence: IndicatorDef = {
+  type: 'rsiDivergence',
+  name: 'RSI Divergence',
+  short: 'RSI Divergence',
+  category: 'Oscillators',
+  overlay: false,
+  format: 'fixed',
+  inputs: [{ key: 'length', label: 'RSI length', type: 'int', default: 14, min: 1, max: 1000 }, ...DIVERGENCE_INPUTS],
+  plots: [{ key: 'rsi', title: 'RSI', kind: 'line', color: '#ad91e5' }],
+  levels: [
+    { title: 'Overbought (70)', value: 70, color: '#ef5350', style: 'solid' },
+    { title: 'Midline (50)', value: 50, color: '#6b7280', style: 'dotted' },
+    { title: 'Oversold (30)', value: 30, color: '#26a69a', style: 'solid' },
+  ],
+  compute: (bars, i) => {
+    const rsi = wilderRsi(bars.map((b) => b.close), n(i.length))
+    const div = divergenceSettings(i)
+    return { values: { rsi }, drawings: divergenceDrawings(detectMacdDivergences(bars, asNullable(rsi), div), div) }
+  },
 }

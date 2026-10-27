@@ -422,6 +422,8 @@ export class ChartEngine {
     if (!rt) return []
     return rt.def.plots
       .filter((p) => rt.inst.styles[p.key]?.visible !== false)
+      // Signal dots (crosses, divergence circles) only show on the bars that have one.
+      .filter((p) => p.kind !== 'dots' || Number.isFinite(rt.out.values[p.key]?.[index]))
       .map((p) => {
         const v = rt.out.values[p.key]?.[index]
         const color = rt.out.colors?.[p.key]?.[index] ?? rt.inst.styles[p.key]?.color ?? p.color

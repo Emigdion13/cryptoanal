@@ -31,7 +31,10 @@ Then open http://localhost:5190.
 - **From btcAnalyzerV2** (same math, checked against V2's own code on the same candles):
   - **MACD** with V2's divergences (regular and hidden, bull and bear) on top of TradingView's MACD.
   - **CM_Ult_MacD_MTF** (ChrisMoody): 4-colour histogram, lime/red MACD line, cross dots, divergences, on the chart's resolution or another one.
-  - **TMO Scalper**: three timeframes (1m / 5m / 30m by default) with the gated ▲▼ arrows and the extreme-only arrows.
+  - **TMO Scalper**: three timeframes (1m / 5m / 30m by default) with the gated ▲▼ arrows, the extreme-only arrows, the OB/OS zones and each timeframe's Main-to-Signal cloud.
+  - **TMO [LuxAlgo]** (Triangular Momentum Oscillator & Real Time Divergences): the 4-colour momentum histogram (or the price-correlation gradient), Buy/Sell turns and divergence lines.
+  - **RSI Divergence**: RSI 14 with regular and hidden divergences.
+  - **RSI** and **Stochastic RSI (14, 14, 3, 3)** are TradingView's built-ins, the same numbers V2 shows.
   - **MSB-OB ZigZag (Market Structure)**: the swing-high to swing-low zig-zag.
   - **Smart Money Concepts [LuxAlgo]**: BOS/CHoCH, swing labels, strong/weak highs and lows, order blocks, EQH/EQL, fair value gaps, previous day/week/month highs and lows, premium/discount zones — every LuxAlgo setting, in sections.
 - **Kalshi Strike (15m up/down)**: the strike of Kalshi's 15-minute market for BTC, ETH, SOL, XRP, DOGE, HYPE or BNB — Kalshi's own published `floor_strike` (the 60-second CF Benchmarks average it settles on), never a Coinbase estimate. Past windows' strikes as an amber step line (about 10 days back), the live one run to the price axis, and a badge: ▲ UP / ▼ DOWN, distance from the strike, time left in the window, and Kalshi's Yes price. Optional ± target lines in Style. Needs the dev server (Kalshi refuses browser requests, so `/api/kalshi/strike` asks for the page).

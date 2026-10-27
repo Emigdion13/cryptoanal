@@ -2,7 +2,7 @@ import type { Candle } from '../data/types'
 import * as ta from './math'
 import type { IndicatorDef, IndicatorInstance, InputDef, InputValue, LevelDef, PlotStyle } from './types'
 import { kalshiStrike } from './kalshiStrike'
-import { cmUltMacd, msbZigZag, smartMoneyConcepts, tmoScalper, withDivergences } from './v2/defs'
+import { cmUltMacd, msbZigZag, rsiDivergence, smartMoneyConcepts, tmoLux, tmoScalper, withDivergences } from './v2/defs'
 
 // TradingView's built-in palette.
 const BLUE = '#2962ff'
@@ -349,8 +349,10 @@ const BUILT_IN: IndicatorDef[] = [
     fills: [{ from: 80, to: 20, color: BLUE_BAND }],
     compute: (bars, i) => {
       const r = ta.rsi(s(bars, i.source), n(i.rsiLength))
-      const k = ta.sma(ta.stoch(r, r, r, n(i.stochLength)), n(i.k))
-      return { values: { k, d: ta.sma(k, n(i.d)) } }
+      // Clamped to 0–100 as btcAnalyzerV2 does: the rolling sum drifts by ~1e-14 at the extremes.
+      const clamp = (v: number) => (Number.isFinite(v) ? Math.min(100, Math.max(0, v)) : v)
+      const k = ta.sma(ta.stoch(r, r, r, n(i.stochLength)), n(i.k)).map(clamp)
+      return { values: { k, d: ta.sma(k, n(i.d)).map(clamp) } }
     },
   },
   {
@@ -613,7 +615,9 @@ const BUILT_IN: IndicatorDef[] = [
 export const INDICATORS: IndicatorDef[] = [
   ...BUILT_IN.map((d) => (d.type === 'macd' ? withDivergences(d) : d)),
   cmUltMacd,
+  rsiDivergence,
   tmoScalper,
+  tmoLux,
   msbZigZag,
   smartMoneyConcepts,
   kalshiStrike,
