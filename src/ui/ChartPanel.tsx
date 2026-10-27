@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { ChartEngine, type CursorMode, type LegendState, type PaneRect } from '../chart/ChartEngine'
 import { granularityFor, parseInterval } from '../data/intervals'
+import { watchKalshi } from '../data/kalshi'
 import { describe, getProduct, type Catalog } from '../data/products'
 import { defaultInputs, INDICATOR_BY_TYPE } from '../indicators/catalog'
 import { useChartData } from '../useChartData'
@@ -59,6 +60,13 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
   useEffect(() => engine?.setChartType(state.chartType), [engine, state.chartType])
   useEffect(() => engine?.setPriceMode(state.priceMode), [engine, state.priceMode])
   useEffect(() => engine?.setCursor(cursor), [engine, cursor])
+  useEffect(() => engine?.setProduct(product.id), [engine, product.id])
+  // Kalshi's strike is polled only while this chart shows the Kalshi Strike indicator.
+  const usesKalshi = state.indicators.some((i) => i.type === 'kalshiStrike' && !i.hidden)
+  useEffect(() => {
+    if (!engine || !usesKalshi) return
+    return watchKalshi(product.id, () => engine.refreshIndicators())
+  }, [engine, usesKalshi, product.id])
   useEffect(() => engine?.setPaneSizes(state.paneSizes), [engine, state.paneSizes])
   useEffect(() => engine?.setIndicators(state.indicators), [engine, state.indicators])
 

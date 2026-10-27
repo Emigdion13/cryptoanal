@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { kalshiPlugin } from './server/kalshi'
 import { workspacePlugin } from './server/workspace'
 
 export default defineConfig({
-  plugins: [react(), workspacePlugin()],
+  plugins: [react(), workspacePlugin(), kalshiPlugin()],
   // A fixed port: another port is another origin, with none of the browser's saved state.
   server: { port: 5190, strictPort: true },
   preview: { port: 5190, strictPort: true },

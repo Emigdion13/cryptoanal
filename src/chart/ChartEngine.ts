@@ -88,8 +88,10 @@ interface Runtime {
   series: Map<string, ISeriesApi<SeriesType>>
   out: Output
   fill: FillPrimitive | null
-  /** Its lines, boxes and labels, attached to its pane. */
+  /** Its boxes (on the pane, behind the candles) and its lines, labels and arrows (on top). */
   drawing: DrawingPrimitive | null
+  front: DrawingPrimitive | null
+  frontHost: ISeriesApi<SeriesType> | null
   pane: number
   /** Recomputed in full on live updates (reads other timeframes, or draws shapes), so throttled. */
   heavy: boolean
@@ -149,6 +151,7 @@ export class ChartEngine {
   private paneSizes: Record<string, number> = {}
   /** Coinbase candles of other granularities, for indicators that read other timeframes. */
   private feeds = new Map<number, { candles: Candle[] }>()
+  private product = ''
   private feedCache = new Map<string, { key: string; bars: Candle[] }>()
   private paneIds: string[] = ['main']
 
@@ -373,6 +376,17 @@ export class ChartEngine {
     if (this.hoverIndex === null) this.emitLegend()
   }
 
+  setProduct(product: string) {
+    if (product === this.product) return
+    this.product = product
+    for (const rt of this.runtimes) if (rt.def.external) this.computeRuntime(rt)
+  }
+
+  /** Outside data an indicator reads (Kalshi) changed: redo those on the next frame. */
+  refreshIndicators() {
+    if (this.runtimes.some((rt) => rt.def.external)) this.indicatorsDirty = true
+  }
+
   /** A feed candle changed: indicators catch up on the next frame. */
   feedsTicked() {
     if (this.runtimes.some((rt) => rt.def.feeds)) this.indicatorsDirty = true
@@ -396,6 +410,7 @@ export class ChartEngine {
   private context(): ComputeContext {
     return {
       interval: this.def ?? { id: '1D', label: 'D', name: '1 day', group: 'days', kind: 'fixed', seconds: 86400, intraday: false },
+      product: this.product,
       feed: (seconds) => this.feedBars(seconds),
       timeToIndex: (time) => this.timeToLogical(time) ?? 0,
     }
@@ -429,6 +444,7 @@ export class ChartEngine {
   private rebuildIndicators() {
     for (const rt of this.runtimes) {
       if (rt.drawing) this.chart.panes()[rt.pane]?.detachPrimitive(rt.drawing)
+      if (rt.front && rt.frontHost === this.main) this.main?.detachPrimitive(rt.front)
       for (const s of rt.series.values()) this.chart.removeSeries(s)
     }
     this.runtimes = []
@@ -448,6 +464,8 @@ export class ChartEngine {
         out: { values: {} },
         fill: null,
         drawing: null,
+        front: null,
+        frontHost: null,
         pane,
         heavy: false,
         lastFull: 0,
@@ -505,8 +523,11 @@ export class ChartEngine {
       const reference = rt.series.values().next().value ?? (pane === 0 ? this.main : null)
       const paneApi = this.chart.panes()[pane] ?? (pane === 0 ? null : this.chart.addPane())
       if (reference && paneApi) {
-        rt.drawing = new DrawingPrimitive(reference)
+        rt.drawing = new DrawingPrimitive(reference, 'back')
         paneApi.attachPrimitive(rt.drawing)
+        rt.front = new DrawingPrimitive(reference, 'front')
+        rt.frontHost = reference
+        reference.attachPrimitive(rt.front)
       }
       this.runtimes.push(rt)
       this.computeRuntime(rt)
@@ -534,10 +555,12 @@ export class ChartEngine {
     rt.out = rt.def.compute(this.bars, { ...defaultInputs(rt.def), ...rt.inst.inputs }, rt.inst.styles, this.context())
     rt.count = this.bars.length
     rt.lastFull = performance.now()
-    rt.heavy = !!rt.def.feeds || !!rt.out.drawings?.length
+    rt.heavy = !!rt.def.feeds || !!rt.def.external || !!rt.out.drawings?.length
     for (const [key, series] of rt.series) series.setData(this.bars.map((_, i) => this.indicatorPoint(rt, key, i)))
     this.updateFills(rt)
-    rt.drawing?.set(rt.inst.hidden ? [] : (rt.out.drawings ?? []), this.bars.length - 1)
+    const drawings = rt.inst.hidden ? [] : (rt.out.drawings ?? [])
+    rt.drawing?.set(drawings, this.bars.length - 1)
+    rt.front?.set(drawings, this.bars.length - 1)
   }
 
   private indicatorPoint(rt: Runtime, key: string, i: number) {

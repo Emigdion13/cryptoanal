@@ -57,7 +57,18 @@ export type Category = 'Trend' | 'Oscillators' | 'Volume' | 'Volatility' | 'Pric
  * 'end' is the newest bar.
  */
 export type Drawing =
-  | { type: 'line'; x1: number; y1: number; x2: number | 'end'; y2: number; color: string; width?: number; dash?: number[] }
+  | {
+      type: 'line'
+      x1: number
+      y1: number
+      x2: number | 'end'
+      y2: number
+      color: string
+      width?: number
+      dash?: number[]
+      /** Runs on to the price axis, like a price line. */
+      extendRight?: boolean
+    }
   | {
       type: 'box'
       x1: number
@@ -81,8 +92,11 @@ export type Drawing =
       size?: number
       weight?: number
       align?: 'center' | 'left' | 'right'
-      /** Pixels to move the text: negative is up. */
+      /** Pixels to move the text: negative is up, positive is right. */
       dy?: number
+      dx?: number
+      /** A filled label behind the text (a badge). */
+      bg?: string
     }
   | { type: 'triangle'; x: number; y: number; dir: 'up' | 'down'; color: string; size: number }
 
@@ -90,6 +104,8 @@ export type Drawing =
 export interface ComputeContext {
   /** The chart's interval. */
   interval: IntervalDef
+  /** The chart's Coinbase product, e.g. BTC-USD. */
+  product: string
   /** Bars of another resolution (seconds), built from Coinbase candles; empty until loaded. */
   feed: (seconds: number) => Candle[]
   /** The chart bar position of a time, with fractions. */
@@ -132,6 +148,8 @@ export interface IndicatorDef {
     styles: Record<string, PlotStyle>,
     ctx: ComputeContext,
   ): Output
+  /** Reads data from outside the bars (Kalshi): redone in full whenever that data changes. */
+  external?: boolean
   /** Other resolutions (seconds) it reads through ctx.feed, for these inputs on this chart. */
   feeds?: (inputs: Record<string, InputValue>, chart: IntervalDef) => number[]
 }

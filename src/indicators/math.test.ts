@@ -52,9 +52,11 @@ describe('catalog', () => {
   it('every indicator computes a value per bar for every plot', () => {
     for (const def of INDICATORS) {
       const inst = createInstance(def.type)
-      const ctx = { interval: parseInterval('1')!, feed: () => bars, timeToIndex: (t: number) => t / 60 }
+      const ctx = { interval: parseInterval('1')!, product: 'BTC-USD', feed: () => bars, timeToIndex: (t: number) => t / 60 }
       const out = def.compute(bars, inst.inputs, inst.styles, ctx)
       if (!def.plots.length) expect(out.drawings, `${def.type} draws`).toBeDefined()
+      // Indicators reading outside data (Kalshi) have nothing to show without it.
+      if (def.external) continue
       for (const plot of def.plots) {
         const values = out.values[plot.key]
         expect(values, `${def.type}.${plot.key}`).toHaveLength(bars.length)

@@ -1,6 +1,7 @@
 import type {
   IChartApi,
   IPanePrimitive,
+  ISeriesPrimitive,
   IPrimitivePaneRenderer,
   IPanePrimitivePaneView,
   ISeriesApi,
@@ -15,11 +16,12 @@ import { theme } from '../theme'
 
 /**
  * An indicator's lines, boxes, labels and arrows (Pine's line.new / box.new / label.new /
- * plotshape), drawn on one pane. Prices are placed on the scale of a reference series of that
- * pane, but the drawings belong to the pane: hiding one of the indicator's lines keeps them.
- * Boxes go behind the candles; everything else on top of them.
+ * plotshape), placed on the price scale of a reference series. Two of these per indicator: the
+ * 'back' layer (boxes) attached to the pane, behind the candles, and the 'front' layer (lines,
+ * labels, arrows) attached to the reference series — a pane primitive's 'top' still draws under
+ * the candles, a series primitive's does not.
  */
-export class DrawingPrimitive implements IPanePrimitive<Time> {
+export class DrawingPrimitive implements IPanePrimitive<Time>, ISeriesPrimitive<Time> {
   private chart: IChartApi | null = null
   private series: ISeriesApi<SeriesType> | null = null
   private requestUpdate: (() => void) | null = null
@@ -33,7 +35,10 @@ export class DrawingPrimitive implements IPanePrimitive<Time> {
     this.requestUpdate?.()
   }
 
-  constructor(series: ISeriesApi<SeriesType>) {
+  constructor(
+    series: ISeriesApi<SeriesType>,
+    private layer: 'back' | 'front',
+  ) {
     this.series = series
   }
 
@@ -47,10 +52,9 @@ export class DrawingPrimitive implements IPanePrimitive<Time> {
   }
 
   paneViews(): readonly IPanePrimitivePaneView[] {
-    return [
-      { zOrder: () => 'bottom', renderer: () => this.back },
-      { zOrder: () => 'top', renderer: () => this.front },
-    ]
+    return this.layer === 'back'
+      ? [{ zOrder: () => 'bottom', renderer: () => this.back }]
+      : [{ zOrder: () => 'top', renderer: () => this.front }]
   }
 
   private x(index: number | 'end'): number | null {
@@ -115,11 +119,11 @@ export class DrawingPrimitive implements IPanePrimitive<Time> {
         for (const d of this.drawings) {
           if (d.type === 'line') {
             const x2i = d.x2 === 'end' ? this.last : d.x2
-            if (!this.visible(Math.min(d.x1, x2i), Math.max(d.x1, x2i))) continue
+            if (!d.extendRight && !this.visible(Math.min(d.x1, x2i), Math.max(d.x1, x2i))) continue
             const x1 = this.x(d.x1),
-              x2 = this.x(d.x2),
               y1 = this.y(d.y1),
               y2 = this.y(d.y2)
+            const x2 = d.extendRight ? (this.chart?.timeScale().width() ?? null) : this.x(d.x2)
             if (x1 === null || x2 === null || y1 === null || y2 === null) continue
             ctx.strokeStyle = d.color
             ctx.lineWidth = d.width ?? 1
@@ -135,11 +139,27 @@ export class DrawingPrimitive implements IPanePrimitive<Time> {
             const x = this.x(d.x),
               y = this.y(d.y)
             if (x === null || y === null) continue
-            ctx.font = `${d.weight ?? 600} ${d.size ?? 10}px ${theme.font}`
-            ctx.fillStyle = d.color
+            const size = d.size ?? 10
+            let tx = x + (d.dx ?? 0)
+            const ty = y + (d.dy ?? 0)
+            ctx.font = `${d.weight ?? 600} ${size}px ${theme.font}`
             ctx.textAlign = d.align ?? 'center'
             ctx.textBaseline = 'middle'
-            ctx.fillText(d.text, x, y + (d.dy ?? 0))
+            if (d.bg) {
+              const w = ctx.measureText(d.text).width + 12,
+                h = size + 8
+              let left = d.align === 'left' ? tx - 6 : d.align === 'right' ? tx - w + 6 : tx - w / 2
+              // A badge stays whole inside the pane: slid left off the price axis when needed.
+              const shift = Math.min(0, (this.chart?.timeScale().width() ?? Infinity) - 4 - (left + w))
+              left += shift
+              tx += shift
+              ctx.fillStyle = d.bg
+              ctx.beginPath()
+              ctx.roundRect(left, ty - h / 2, w, h, 3)
+              ctx.fill()
+            }
+            ctx.fillStyle = d.color
+            ctx.fillText(d.text, tx, ty)
           } else if (d.type === 'triangle') {
             if (!this.visible(d.x, d.x)) continue
             const x = this.x(d.x),
