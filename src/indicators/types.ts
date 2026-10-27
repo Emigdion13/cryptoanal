@@ -106,7 +106,7 @@ export type Drawing =
        * their text) and plotarrow's tall entry arrows. `offset` is pixels away from the bar.
        */
       type: 'shape'
-      shape: 'triangleUp' | 'triangleDown' | 'arrowUp' | 'arrowDown' | 'plotArrowUp' | 'plotArrowDown'
+      shape: 'triangleUp' | 'triangleDown' | 'arrowUp' | 'arrowDown' | 'plotArrowUp' | 'plotArrowDown' | 'labelUp' | 'labelDown'
       x: number
       y: number
       offset: number

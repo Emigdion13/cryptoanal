@@ -197,11 +197,33 @@ export class DrawingPrimitive implements IPanePrimitive<Time>, ISeriesPrimitive<
    * arrow (55 px, between its 50–60 px heights).
    */
   private drawShape(ctx: CanvasRenderingContext2D, d: Extract<Drawing, { type: 'shape' }>, x: number, y: number) {
-    const below = d.shape === 'triangleUp' || d.shape === 'arrowUp' || d.shape === 'plotArrowUp'
+    const below = d.shape === 'triangleUp' || d.shape === 'arrowUp' || d.shape === 'plotArrowUp' || d.shape === 'labelUp'
     const dir = below ? 1 : -1 // away from the bar
     const tip = y + dir * d.offset
     ctx.fillStyle = d.color
     ctx.strokeStyle = d.color
+    if (d.shape === 'labelUp' || d.shape === 'labelDown') {
+      // plotshape labelup/labeldown, size.tiny: a filled tag pointing at the bar, white text.
+      ctx.font = `10px ${theme.font}`
+      const w = Math.max(14, ctx.measureText(d.text ?? '').width + 8),
+        h = 15,
+        pointer = 4
+      const near = tip + dir * pointer
+      ctx.beginPath()
+      ctx.moveTo(x, tip)
+      ctx.lineTo(x + 4, near)
+      ctx.lineTo(x - 4, near)
+      ctx.closePath()
+      ctx.fill()
+      ctx.beginPath()
+      ctx.roundRect(x - w / 2, below ? near : near - h, w, h, 2)
+      ctx.fill()
+      ctx.fillStyle = '#ffffff'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(d.text ?? '', x, near + (dir * h) / 2)
+      return
+    }
     ctx.beginPath()
     if (d.shape === 'triangleUp' || d.shape === 'triangleDown') {
       ctx.moveTo(x, tip)
