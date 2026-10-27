@@ -101,6 +101,12 @@ interface Runtime {
   stylesKey: string
 }
 
+/** The pane heights at a press, and which panes they were. */
+interface PaneHeights {
+  structure: string
+  heights: number[]
+}
+
 const RIGHT_OFFSET = 8
 const DEFAULT_SPACING = 6
 const LEVEL_STYLE = { solid: LineStyle.Solid, dashed: LineStyle.Dashed, dotted: LineStyle.Dotted }
@@ -349,24 +355,25 @@ export class ChartEngine {
     this.applyPaneSizes()
   }
 
-  /** The stretch factors last set here; the engine changes its own while a separator is dragged. */
-  private appliedFactors: number[] = []
-
   private applyPaneSizes() {
     const panes = this.chart.panes()
-    this.appliedFactors = this.paneIds.map((id) => this.paneSizes[id] ?? (id === 'main' ? 3 : 1))
-    this.appliedFactors.forEach((f, k) => panes[k]?.setStretchFactor(f))
+    const factors = this.paneIds.map((id) => this.paneSizes[id] ?? (id === 'main' ? 3 : 1))
+    // No pane under 6% of the chart: one squashed flat by an earlier version comes back usable.
+    const floor = factors.reduce((a, b) => a + b, 0) * 0.06
+    factors.forEach((f, k) => panes[k]?.setStretchFactor(Math.max(f, floor)))
   }
 
-  /** After a drag: if the panes no longer match their stretch factors, report the new sizes. */
-  private checkPaneSizes() {
+  /**
+   * After a press and release on the chart: if the same panes now have other heights than at the
+   * press, a separator was dragged — report the new sizes.
+   */
+  private checkPaneSizes(before: PaneHeights) {
     const panes = this.chart.panes()
-    if (panes.length < 2 || panes.length !== this.paneIds.length) return
+    if (panes.length < 2 || panes.length !== this.paneIds.length || before.structure !== this.structure) return
     const heights = panes.map((p) => p.getHeight())
-    const factors = this.appliedFactors
-    const h = heights.reduce((a, b) => a + b, 0),
-      f = factors.reduce((a, b) => a + b, 0)
-    if (!h || heights.every((v, k) => Math.abs(v / h - factors[k] / f) < 0.01)) return
+    if (heights.length !== before.heights.length || heights.every((v, k) => Math.abs(v - before.heights[k]) <= 1)) return
+    const h = heights.reduce((a, b) => a + b, 0)
+    if (!h) return
     const sizes = Object.fromEntries(this.paneIds.map((id, k) => [id, Math.round((heights[k] / h) * 1000) / 100]))
     this.paneSizes = sizes
     this.applyPaneSizes()
@@ -1103,8 +1110,11 @@ export class ChartEngine {
     }
 
     let drag: { id: number; y: number; range: { from: number; to: number } | null } | null = null
+    // The pane heights when the mouse went down on this chart: a separator may be dragged.
+    let pressed: PaneHeights | null = null
     const onDown = (event: PointerEvent) => {
       drag = null
+      pressed = { structure: this.structure, heights: chart.panes().map((p) => p.getHeight()) }
       if (event.button !== 0 || hit(event) !== 'plot' || this.priceMode === 'percent') return
       if (!chart.priceScale('right').options().autoScale) return
       drag = { id: event.pointerId, y: event.clientY, range: null }
@@ -1134,8 +1144,12 @@ export class ChartEngine {
     }
     const onUp = () => {
       drag = null
-      // A pane separator may just have been dragged.
-      requestAnimationFrame(() => this.checkPaneSizes())
+      // A pane separator may just have been dragged. Only a press on this chart counts: a click
+      // elsewhere (a legend button, the Indicators dialog) can rebuild the panes, and their
+      // heights mid-rebuild are not sizes anyone chose.
+      const before = pressed
+      pressed = null
+      if (before) requestAnimationFrame(() => this.checkPaneSizes(before))
     }
 
     let anchorTimer: ReturnType<typeof setTimeout> | undefined
