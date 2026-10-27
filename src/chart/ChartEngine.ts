@@ -223,11 +223,12 @@ export class ChartEngine {
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.onRange)
     this.bindPointer()
     const loop = () => {
+      // Scheduled first: one frame that throws must not stop the chart for good.
+      this.raf = requestAnimationFrame(loop)
       if (this.indicatorsDirty) this.syncIndicators()
       this.paintLabels()
       this.watchScale()
       this.watchPanes()
-      this.raf = requestAnimationFrame(loop)
     }
     this.raf = requestAnimationFrame(loop)
   }
@@ -434,7 +435,13 @@ export class ChartEngine {
       })
   }
 
-  private formatValue(def: IndicatorDef, v: number): string {
+  /** An indicator's last output and the bars it was computed on, for its floating window. */
+  indicatorSnapshot(id: string): { def: IndicatorDef; out: Output; bars: readonly Candle[] } | null {
+    const rt = this.runtimes.find((r) => r.inst.id === id)
+    return rt ? { def: rt.def, out: rt.out, bars: this.bars } : null
+  }
+
+  formatValue(def: IndicatorDef, v: number): string {
     if (def.format === 'volume') return formatVolume(v, true)
     if (def.format === 'price') return formatPrice(v, def.precision ?? this.precision)
     return formatPrice(v, 2)
@@ -597,6 +604,8 @@ export class ChartEngine {
   private syncIndicators() {
     this.indicatorsDirty = false
     const n = this.bars.length
+    // Outside data (Kalshi, other timeframes) can arrive before the chart's own bars.
+    if (!n) return
     const now = performance.now()
     for (const rt of this.runtimes) {
       // Shapes and other-timeframe lines can move on any bar: redo them in full, four times a second.

@@ -97,6 +97,14 @@ export const GearIcon = (p: IconProps) => (
   </Icon>
 )
 
+/** A window with a small chart in it: the floating indicator windows. */
+export const FloatIcon = (p: IconProps) => (
+  <Icon size={18} viewBox="0 0 18 18" {...p}>
+    <rect x="2.5" y="3.5" width="13" height="11" rx="1.5" />
+    <path d="M2.5 6.5h13M5 12l2.5-2.5 2 1.5L13 8" strokeLinejoin="round" />
+  </Icon>
+)
+
 export const FxIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M13 8.5c-1.6-.6-3 .2-3.3 2L8.5 20.5c-.3 1.8-1.7 2.6-3.3 2M6.5 12.5h6" strokeLinecap="round" />

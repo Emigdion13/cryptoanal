@@ -186,12 +186,24 @@ function schedule(delay = SAVE_DELAY_MS) {
   if (timer === undefined) timer = setTimeout(() => void flushWorkspace(), delay)
 }
 
+// What the app starts from follows every change, not just the file read at page load: a remount
+// (a dev-server hot update while the app is open) must start from the latest state, or it would
+// save the page-load copy back over everything changed since.
+
 export function queueSettings(settings: Settings) {
+  initialSettings = settings
+  initialV1 = null
   pending.settings = settings
   schedule()
 }
 
 export function queueLayout(id: string, layout: SavedLayout | null) {
+  const known = initialLayouts.some((l) => l.id === id)
+  initialLayouts = layout
+    ? known
+      ? initialLayouts.map((l) => (l.id === id ? layout : l))
+      : [...initialLayouts, layout]
+    : initialLayouts.filter((l) => l.id !== id)
   pending.layouts = { ...pending.layouts, [id]: layout }
   schedule()
 }

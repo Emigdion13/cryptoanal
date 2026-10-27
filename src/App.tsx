@@ -5,8 +5,9 @@ import { describe, getProduct, useCatalog } from './data/products'
 import { useQuotes } from './data/quotes'
 import type { Product } from './data/types'
 import { formatPercent, formatPrice } from './format'
-import { createInstance } from './indicators/catalog'
-import type { IndicatorInstance } from './indicators/types'
+import { createInstance, INDICATOR_BY_TYPE, instanceTitle } from './indicators/catalog'
+import type { FloatingState, IndicatorInstance } from './indicators/types'
+import { canFloat } from './ui/floatingModel'
 import { BottomBar, type RangePreset } from './ui/BottomBar'
 import { ChartPanel, type PanelHandle } from './ui/ChartPanel'
 import { Header } from './ui/Header'
@@ -99,6 +100,25 @@ export function App() {
       }),
     [update],
   )
+
+  /** Changes an indicator's floating window; opening a window it never had starts it docked. */
+  const setFloating = useCallback(
+    (index: number, id: string, patch: Partial<FloatingState>) =>
+      setIndicators(index, (list) =>
+        list.map((x) => (x.id === id ? { ...x, floating: { open: true, ...x.floating, ...patch } } : x)),
+      ),
+    [setIndicators],
+  )
+  // The active chart's oscillators, in legend order: the Floating menu and Alt+1…9.
+  const floatables = chart.indicators.filter((i) => canFloat(INDICATOR_BY_TYPE.get(i.type)))
+  const toggleFloating = (id: string) => {
+    const inst = floatables.find((i) => i.id === id)
+    if (inst) setFloating(active, id, { open: !inst.floating?.open })
+  }
+  const setAllFloating = (open: boolean) =>
+    setIndicators(active, (list) =>
+      list.map((x) => (canFloat(INDICATOR_BY_TYPE.get(x.type)) ? { ...x, floating: { ...x.floating, open } } : x)),
+    )
 
   const pickLayout = (id: string) =>
     update((s) => {
@@ -193,6 +213,12 @@ export function App() {
       if (e.altKey && e.code === 'KeyR') {
         e.preventDefault()
         engine?.reset()
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && /^Digit[0-9]$/.test(e.code)) {
+        // Alt+1…9: the floating window of the active chart's 1st…9th oscillator; Alt+0: all of them.
+        e.preventDefault()
+        const n = Number(e.code.slice(5))
+        if (n === 0) setAllFloating(!floatables.some((i) => i.floating?.open))
+        else if (floatables[n - 1]) toggleFloating(floatables[n - 1].id)
       } else if (e.ctrlKey || e.metaKey || e.altKey) return
       else if (e.key === '/') {
         e.preventDefault()
@@ -210,7 +236,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [active, modalOpen])
+  })
 
   const editingInst = editing ? charts[editing.chart]?.indicators.find((i) => i.id === editing.id) : undefined
 
@@ -233,6 +259,13 @@ export function App() {
         onFavorites={(favorites) => update({ favorites })}
         onChartType={(chartType) => updateChart(active, { chartType })}
         onIndicators={() => setIndicatorsOpen(true)}
+        floating={floatables.map((i) => ({
+          id: i.id,
+          title: instanceTitle(INDICATOR_BY_TYPE.get(i.type)!, i),
+          open: !!i.floating?.open,
+        }))}
+        onFloat={toggleFloating}
+        onFloatAll={setAllFloating}
         onLayout={pickLayout}
         onSync={(sync) => update({ sync })}
         onFullscreen={toggleFullscreen}
@@ -275,6 +308,12 @@ export function App() {
                 }
                 onSettings={(id) => setEditing({ chart: i, id })}
                 onRemove={(id) => setIndicators(i, (list) => list.filter((x) => x.id !== id))}
+                onFloat={(id) =>
+                  setIndicators(i, (list) =>
+                    list.map((x) => (x.id === id ? { ...x, floating: { ...x.floating, open: !x.floating?.open } } : x)),
+                  )
+                }
+                onFloating={(id, patch) => setFloating(i, id, patch)}
               />
             </div>
           ))}

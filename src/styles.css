@@ -1372,3 +1372,313 @@ button {
 .settings-body {
   gap: 8px;
 }
+
+/* ── floating indicator windows (V2's oscillator windows) ───────────────── */
+
+.tb-count {
+  min-width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--active);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+.floating-menu {
+  min-width: 260px;
+}
+.menu-heading {
+  padding: 6px 16px 4px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+.menu-note.wrap {
+  white-space: normal;
+  line-height: 1.4;
+}
+.menu-check {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  color: var(--text);
+}
+.menu-shortcut {
+  margin-left: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.ind-actions button.on {
+  color: #2962ff;
+}
+
+.float-card {
+  position: absolute;
+  z-index: 6;
+  width: 288px;
+  padding: 7px 9px 8px;
+  background: rgba(30, 30, 30, 0.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid #363636;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  font-size: 11px;
+  user-select: none;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+.float-card.is-minimized {
+  width: auto;
+  max-width: 288px;
+  padding: 5px 8px;
+}
+.float-card.is-dragging {
+  transition: none;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7), 0 0 18px rgba(41, 98, 255, 0.18);
+}
+/* The frame answers the call the indicator is making, as V2's did. */
+.float-card.is-ob {
+  border-color: rgba(242, 54, 69, 0.6);
+  box-shadow: 0 0 14px rgba(242, 54, 69, 0.2), 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+.float-card.is-os {
+  border-color: rgba(8, 153, 129, 0.7);
+  box-shadow: 0 0 14px rgba(8, 153, 129, 0.22), 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+.float-card.is-bull {
+  border-color: rgba(8, 153, 129, 0.4);
+}
+.float-card.is-bear {
+  border-color: rgba(242, 54, 69, 0.4);
+}
+.float-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  cursor: grab;
+  touch-action: none;
+}
+.float-card.is-dragging .float-head {
+  cursor: grabbing;
+}
+.float-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.float-card.is-ob .float-dot,
+.float-card.is-os .float-dot {
+  animation: float-pulse 1.6s infinite;
+}
+@keyframes float-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.float-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text);
+}
+.float-tag {
+  flex-shrink: 0;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+.float-tag.is-live {
+  background: rgba(8, 153, 129, 0.2);
+  color: #22ab94;
+}
+.float-tag.is-bar {
+  background: rgba(41, 98, 255, 0.2);
+  color: #6f94ff;
+}
+.float-tag.is-history {
+  background: rgba(255, 152, 0, 0.18);
+  color: #ff9800;
+}
+.float-space {
+  margin-left: auto;
+}
+.float-head button {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  color: var(--text-muted);
+}
+.float-head button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.float-head button.is-close:hover {
+  color: var(--down);
+}
+.float-sub {
+  margin: 1px 0 3px;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.float-plot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 6px;
+}
+.float-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: grab;
+  touch-action: none;
+}
+.float-svg.is-panning {
+  cursor: grabbing;
+}
+.float-cursor line {
+  stroke: rgba(255, 255, 255, 0.3);
+  stroke-dasharray: 2 2;
+}
+.float-axis {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.float-axis-mark {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: #2b2b2b;
+  color: var(--text);
+}
+.float-readouts {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.float-readout {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.float-readout small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.float-readout b {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.float-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+}
+.float-verdict {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  border-radius: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.float-verdict.tone-bull {
+  background: rgba(8, 153, 129, 0.18);
+  color: #22ab94;
+}
+.float-verdict.tone-bear {
+  background: rgba(242, 54, 69, 0.16);
+  color: #f7525f;
+}
+.float-verdict.tone-ob {
+  background: rgba(242, 54, 69, 0.24);
+  color: #ff6b77;
+}
+.float-verdict.tone-os {
+  background: rgba(8, 153, 129, 0.26);
+  color: #2ed1b2;
+}
+.float-verdict.tone-flat {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-dim);
+}
+.float-steps {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.float-steps > span {
+  min-width: 20px;
+  text-align: center;
+}
+.float-steps button {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-dim);
+}
+.float-steps button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+.float-steps button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.float-steps button.is-live {
+  color: #6f94ff;
+}
+.float-min-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+}
+.float-min-row b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

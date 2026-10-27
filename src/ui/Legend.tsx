@@ -5,12 +5,15 @@ import { formatChange, formatPercent, formatPrice } from '../format'
 import { INDICATOR_BY_TYPE, instanceTitle } from '../indicators/catalog'
 import type { IndicatorInstance } from '../indicators/types'
 import { CoinLogo } from './common'
-import { CloseIcon, EyeIcon, GearIcon } from './icons'
+import { canFloat } from './floatingModel'
+import { CloseIcon, EyeIcon, FloatIcon, GearIcon } from './icons'
 
 export interface IndicatorActions {
   onToggle: (id: string) => void
   onSettings: (id: string) => void
   onRemove: (id: string) => void
+  /** Opens or closes its floating window. */
+  onFloat: (id: string) => void
 }
 
 interface RowProps extends IndicatorActions {
@@ -21,7 +24,7 @@ interface RowProps extends IndicatorActions {
 }
 
 /** One indicator in the legend: title, values, and TradingView's hover buttons. */
-export function IndicatorRow({ inst, product, engine, state, onToggle, onSettings, onRemove }: RowProps) {
+export function IndicatorRow({ inst, product, engine, state, onToggle, onSettings, onRemove, onFloat }: RowProps) {
   const def = INDICATOR_BY_TYPE.get(inst.type)
   if (!def) return null
   const title = def.type === 'volume' ? `Vol · ${product.base}` : instanceTitle(def, inst)
@@ -40,6 +43,15 @@ export function IndicatorRow({ inst, product, engine, state, onToggle, onSetting
         <button title={inst.hidden ? 'Show' : 'Hide'} onClick={() => onToggle(inst.id)}>
           <EyeIcon off={inst.hidden} />
         </button>
+        {canFloat(def) && (
+          <button
+            className={inst.floating?.open ? 'on' : undefined}
+            title={inst.floating?.open ? 'Close the floating window' : 'Floating window'}
+            onClick={() => onFloat(inst.id)}
+          >
+            <FloatIcon />
+          </button>
+        )}
         <button title="Settings" onClick={() => onSettings(inst.id)}>
           <GearIcon />
         </button>

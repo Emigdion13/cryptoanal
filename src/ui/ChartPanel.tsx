@@ -3,7 +3,10 @@ import { ChartEngine, type CursorMode, type LegendState, type PaneRect } from '.
 import { granularityFor, parseInterval } from '../data/intervals'
 import { watchKalshi } from '../data/kalshi'
 import { describe, getProduct, type Catalog } from '../data/products'
-import { defaultInputs, INDICATOR_BY_TYPE } from '../indicators/catalog'
+import { defaultInputs, INDICATOR_BY_TYPE, instanceTitle } from '../indicators/catalog'
+import type { FloatingState } from '../indicators/types'
+import { FloatingCard } from './FloatingCard'
+import { canFloat } from './floatingModel'
 import { useChartData } from '../useChartData'
 import { RealtimeIcon } from './icons'
 import { IndicatorRow, MainLegend, type IndicatorActions } from './Legend'
@@ -25,6 +28,8 @@ interface Props extends IndicatorActions {
   onEngine: (index: number, engine: ChartEngine | null) => void
   onAutoScale: (index: number, on: boolean) => void
   onPaneSizes: (index: number, sizes: Record<string, number>) => void
+  /** Moves, resizes, minimizes or closes an indicator's floating window. */
+  onFloating: (id: string, patch: Partial<FloatingState>) => void
 }
 
 /** One chart of the layout, with its own symbol, interval, data feed and legends. */
@@ -90,7 +95,10 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
     const def = INDICATOR_BY_TYPE.get(i.type)
     return def && !def.overlay
   })
-  const actions = { onToggle: props.onToggle, onSettings: props.onSettings, onRemove: props.onRemove }
+  const actions = { onToggle: props.onToggle, onSettings: props.onSettings, onRemove: props.onRemove, onFloat: props.onFloat }
+  const floating = state.indicators.filter((i) => i.floating?.open && canFloat(INDICATOR_BY_TYPE.get(i.type)))
+  // Cards not dragged anywhere yet line up along the top right, in legend order.
+  const docked = floating.filter((i) => i.floating?.x === undefined)
 
   return (
     <div
@@ -126,6 +134,25 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
           <RealtimeIcon />
         </button>
       )}
+      {engine &&
+        floating.map((inst) => {
+          const def = INDICATOR_BY_TYPE.get(inst.type)!
+          return (
+            <FloatingCard
+              key={inst.id}
+              inst={inst}
+              def={def}
+              engine={engine}
+              legend={legend}
+              title={instanceTitle(def, inst)}
+              context={`${product.ticker} · ${interval ? (interval.intraday ? interval.label : `1${interval.label}`) : state.interval}`}
+              intervalSeconds={interval?.seconds ?? null}
+              dockIndex={docked.indexOf(inst)}
+              onChange={(patch) => props.onFloating(inst.id, patch)}
+              onSettings={() => props.onSettings(inst.id)}
+            />
+          )
+        })}
       {status === 'error' && <div className="chart-toast">Can't reach Coinbase — retrying…</div>}
     </div>
   )

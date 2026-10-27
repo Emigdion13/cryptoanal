@@ -170,6 +170,17 @@ export interface IndicatorDef {
   feeds?: (inputs: Record<string, InputValue>, chart: IntervalDef) => number[]
 }
 
+/** An indicator's floating window (V2's oscillator windows), as saved with the layout. */
+export interface FloatingState {
+  open: boolean
+  /** Where it was dragged to, from the chart's top-left; docked at the top right until then. */
+  x?: number
+  y?: number
+  minimized?: boolean
+  /** Bars in the window. */
+  bars?: number
+}
+
 /** One indicator on one chart, as saved. */
 export interface IndicatorInstance {
   id: string
@@ -177,4 +188,5 @@ export interface IndicatorInstance {
   inputs: Record<string, InputValue>
   styles: Record<string, PlotStyle>
   hidden: boolean
+  floating?: FloatingState
 }

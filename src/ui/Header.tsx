@@ -8,8 +8,10 @@ import type { SyncOptions } from './settings'
 import {
   CameraIcon,
   CHART_TYPE_ICONS,
+  CheckIcon,
   ChevronDown,
   ChevronRight,
+  FloatIcon,
   FullscreenIcon,
   FxIcon,
   SearchIcon,
@@ -43,6 +45,10 @@ interface Props {
   onFullscreen: () => void
   onScreenshot: () => void
   onIndicators: () => void
+  /** The active chart's oscillators, for the Floating menu. */
+  floating: { id: string; title: string; open: boolean }[]
+  onFloat: (id: string) => void
+  onFloatAll: (open: boolean) => void
   layout: string
   sync: SyncOptions
   onLayout: (id: string) => void
@@ -92,6 +98,7 @@ export function Header(props: Props) {
         <FxIcon />
         <span>Indicators</span>
       </button>
+      <FloatingMenu items={props.floating} onToggle={props.onFloat} onAll={props.onFloatAll} />
       <div className="sep" />
       <div className="header-spacer" />
       <LayoutMenu layout={props.layout} sync={props.sync} onLayout={props.onLayout} onSync={props.onSync} />
@@ -205,6 +212,58 @@ function ChartTypeMenu({ value, onPick }: { value: ChartType; onPick: (t: ChartT
               </div>
             )
           })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * V2's Floating selector: one menu for every floating window of the active chart, with a count of
+ * the open ones. It stays open across clicks, so several windows can be flipped in one visit.
+ */
+function FloatingMenu(props: {
+  items: { id: string; title: string; open: boolean }[]
+  onToggle: (id: string) => void
+  onAll: (open: boolean) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const close = useCallback(() => setOpen(false), [])
+  useDismiss(ref, open, close)
+  const count = props.items.filter((i) => i.open).length
+
+  return (
+    <div className="dropdown" ref={ref}>
+      <button
+        className={`tb-btn with-text${open ? ' open' : ''}`}
+        onClick={() => setOpen(!open)}
+        title="Floating indicator windows"
+      >
+        <FloatIcon size={22} />
+        <span>Floating</span>
+        {count > 0 && <span className="tb-count">{count}</span>}
+      </button>
+      {open && (
+        <div className="menu floating-menu">
+          <div className="menu-heading">FLOATING WINDOWS</div>
+          {props.items.length === 0 && (
+            <div className="menu-note wrap">Add an oscillator — RSI, MACD, Stochastic, TMO… — to open it in a window.</div>
+          )}
+          {props.items.map((item, k) => (
+            <div key={item.id} className="menu-item with-icon" onClick={() => props.onToggle(item.id)}>
+              <span className="menu-check">{item.open && <CheckIcon />}</span>
+              <span className="menu-label">{item.title}</span>
+              {k < 9 && <span className="menu-shortcut">Alt+{k + 1}</span>}
+            </div>
+          ))}
+          {props.items.length > 1 && (
+            <div className="menu-item with-icon" onClick={() => props.onAll(count === 0)}>
+              <span className="menu-check" />
+              <span className="menu-label">{count === 0 ? 'Open all' : 'Close all'}</span>
+              <span className="menu-shortcut">Alt+0</span>
+            </div>
+          )}
         </div>
       )}
     </div>
