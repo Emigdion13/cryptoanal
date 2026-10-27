@@ -612,6 +612,7 @@ export class ChartEngine {
           to: typeof f.to === 'number' ? f.to : (rt.out.values[f.to] ?? []),
           color: f.color,
           colorBelow: f.colorBelow,
+          colors: f.colorsKey ? rt.out.colors?.[f.colorsKey] : undefined,
         }))
     rt.fill.setFills(fills)
   }

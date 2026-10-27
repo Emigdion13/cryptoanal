@@ -49,6 +49,8 @@ export interface FillDef {
   color: string
   /** Color where `from` is below `to` (the cloud flips). */
   colorBelow?: string
+  /** Per-bar colours from the output's `colors[colorsKey]` (Pine's fill with a series colour). */
+  colorsKey?: string
 }
 
 export type Category = 'Trend' | 'Oscillators' | 'Volume' | 'Volatility' | 'Price Action'

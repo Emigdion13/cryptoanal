@@ -272,7 +272,7 @@ function Plot({ model, y, cursor, clipId }: { model: FloatModel; y: (v: number) 
           const b0 = f.to[k]
           const b1 = f.to[k + 1]
           if (a0 === null || a1 == null || b0 === null || b1 == null) return null
-          const color = f.colorBelow && a1 < b1 ? f.colorBelow : f.color
+          const color = f.colors?.[k + 1] ?? (f.colorBelow && a1 < b1 ? f.colorBelow : f.color)
           return (
             <polygon
               key={`${n}-${k}`}
@@ -282,6 +282,16 @@ function Plot({ model, y, cursor, clipId }: { model: FloatModel; y: (v: number) 
           )
         }),
       )}
+      {model.boxes.map((b, k) => (
+        <rect
+          key={`box-${k}`}
+          x={x(b.x1)}
+          y={y(b.top)}
+          width={Math.max(1, x(b.x2) - x(b.x1))}
+          height={Math.max(1, y(b.bottom) - y(b.top))}
+          fill={b.fill}
+        />
+      ))}
       {model.histograms.map((h) =>
         h.values.map((v, k) =>
           v === null ? null : (

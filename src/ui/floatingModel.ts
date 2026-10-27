@@ -67,6 +67,8 @@ export interface FloatFill {
   to: (number | null)[]
   color: string
   colorBelow?: string
+  /** A colour per bar in the window, over `color`. */
+  colors?: (string | undefined)[]
 }
 
 /** A plotshape / triangle: `x` is the bar in the window, `y` the value it is anchored to. */
@@ -85,6 +87,15 @@ export interface FloatSegment {
   color: string
   width: number
   dash?: number[]
+}
+
+/** A body between two values (Bayesian's banker candles), in window bar units. */
+export interface FloatBox {
+  x1: number
+  x2: number
+  top: number
+  bottom: number
+  fill: string
 }
 
 export interface FloatText {
@@ -106,6 +117,7 @@ export interface FloatModel {
   levels: { value: number; color: string; dashed: boolean }[]
   marks: FloatMark[]
   segments: FloatSegment[]
+  boxes: FloatBox[]
   texts: FloatText[]
   domain: { min: number; max: number }
   /** Symmetric about zero (an oscillator read around it). */
@@ -152,6 +164,7 @@ export function buildModel({ def, out, bars, styles, end, count }: ModelInput): 
     to: typeof f.to === 'number' ? Array<number>(n).fill(f.to) : numbers(out.values[f.to]),
     color: f.color,
     colorBelow: f.colorBelow,
+    colors: f.colorsKey && out.colors?.[f.colorsKey] ? Array.from({ length: n }, (_, k) => out.colors![f.colorsKey!][start + k]) : undefined,
   }))
 
   const { domain, centered } = paneDomain(
@@ -196,10 +209,11 @@ export function paneDomain(series: (number | null)[][], histogram: boolean) {
 
 const UP_SHAPES = new Set(['triangleUp', 'arrowUp', 'plotArrowUp', 'labelUp'])
 
-/** The indicator's own drawings (divergence lines and tags, signal triangles) inside the window. */
+/** The indicator's own drawings (divergence lines and tags, signal triangles, bodies) inside the window. */
 function placeDrawings(drawings: Drawing[], start: number, last: number, newest: number) {
   const marks: FloatMark[] = []
   const segments: FloatSegment[] = []
+  const boxes: FloatBox[] = []
   const texts: FloatText[] = []
   const at = (x: number | 'end') => (x === 'end' ? newest : x)
   const inside = (x: number) => x >= start - 0.5 && x <= last + 0.5
@@ -211,12 +225,16 @@ function placeDrawings(drawings: Drawing[], start: number, last: number, newest:
       if (Math.max(d.x1, x2) < start || Math.min(d.x1, x2) > last) continue
       const to = Number.isFinite(x2) ? x2 - start : last - start + 1
       segments.push({ x1: d.x1 - start, y1: d.y1, x2: to, y2: d.y2, color: d.color, width: d.width ?? 1, dash: d.dash })
+    } else if (d.type === 'box') {
+      const x2 = at(d.x2)
+      if (Math.max(d.x1, x2) < start - 0.5 || Math.min(d.x1, x2) > last + 0.5) continue
+      boxes.push({ x1: d.x1 - start, x2: x2 - start, top: d.top, bottom: d.bottom, fill: d.fill })
     } else if (d.type === 'text') {
       const x = at(d.x)
       if (!d.bg && inside(x)) texts.push({ x: x - start, y: d.y, text: d.text, color: d.color, dy: d.dy ?? 0 })
     }
   }
-  return { marks, segments, texts }
+  return { marks, segments, boxes, texts }
 }
 
 // ── the call ─────────────────────────────────────────────────────────────

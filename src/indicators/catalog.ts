@@ -4,6 +4,7 @@ import type { IndicatorDef, IndicatorInstance, InputDef, InputValue, LevelDef, P
 import { kalshiStrike } from './kalshiStrike'
 import { tuxEmaScalper } from './tuxDef'
 import { luxSrBreaks } from './luxSr'
+import { bayesianNqqe } from './v2/bayesianDef'
 import { cmUltMacd, msbZigZag, rsiDivergence, smartMoneyConcepts, tmoLux, tmoScalper, withDivergences } from './v2/defs'
 
 // TradingView's built-in palette.
@@ -625,6 +626,7 @@ export const INDICATORS: IndicatorDef[] = [
   kalshiStrike,
   tuxEmaScalper,
   luxSrBreaks,
+  bayesianNqqe,
 ]
 
 export const INDICATOR_BY_TYPE = new Map(INDICATORS.map((d) => [d.type, d]))

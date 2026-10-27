@@ -17,6 +17,8 @@ export interface Fill {
   to: number[] | number
   color: string
   colorBelow?: string
+  /** A colour per bar, over `color`: the step ending on a bar takes that bar's colour. */
+  colors?: (string | undefined)[]
 }
 
 /**
@@ -94,7 +96,7 @@ export class FillPrimitive implements ISeriesPrimitive<Time> {
               flush()
               continue
             }
-            const color = fill.colorBelow && f < t ? fill.colorBelow : fill.color
+            const color = fill.colors?.[i] ?? (fill.colorBelow && f < t ? fill.colorBelow : fill.color)
             const point = { x, yf, yt }
             if (run.length && color !== runColor) {
               run.push(point)
