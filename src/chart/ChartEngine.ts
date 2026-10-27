@@ -19,11 +19,12 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
-import { nextBucket, type IntervalDef } from '../data/intervals'
+import { aggregateSeconds, granularityFor, nextBucket, type IntervalDef } from '../data/intervals'
 import type { Candle } from '../data/types'
 import { formatCountdown, formatCrosshairTime, formatPrice, formatVolume } from '../format'
 import { defaultInputs, INDICATOR_BY_TYPE } from '../indicators/catalog'
-import type { IndicatorDef, IndicatorInstance, Output } from '../indicators/types'
+import type { ComputeContext, IndicatorDef, IndicatorInstance, Output } from '../indicators/types'
+import { DrawingPrimitive } from './DrawingPrimitive'
 import { theme } from '../theme'
 import { FillPrimitive, type Fill } from './FillPrimitive'
 import { heikinAshi, nextHeikinAshi } from './heikinAshi'
@@ -87,6 +88,12 @@ interface Runtime {
   series: Map<string, ISeriesApi<SeriesType>>
   out: Output
   fill: FillPrimitive | null
+  /** Its lines, boxes and labels, attached to its pane. */
+  drawing: DrawingPrimitive | null
+  pane: number
+  /** Recomputed in full on live updates (reads other timeframes, or draws shapes), so throttled. */
+  heavy: boolean
+  lastFull: number
   count: number
   inputsKey: string
   stylesKey: string
@@ -140,6 +147,9 @@ export class ChartEngine {
   private indicatorsDirty = false
   /** Saved pane heights, and which pane is which ('main', then indicator ids). */
   private paneSizes: Record<string, number> = {}
+  /** Coinbase candles of other granularities, for indicators that read other timeframes. */
+  private feeds = new Map<number, { candles: Candle[] }>()
+  private feedCache = new Map<string, { key: string; bars: Candle[] }>()
   private paneIds: string[] = ['main']
 
   /** Set while this chart is being moved by another one, so it doesn't echo back. */
@@ -355,6 +365,42 @@ export class ChartEngine {
     this.emit('paneSizes', sizes)
   }
 
+  /** Candles of other granularities (live objects: their `candles` grow as trades arrive). */
+  setFeeds(feeds: Map<number, { candles: Candle[] }>) {
+    this.feeds = feeds
+    this.feedCache.clear()
+    for (const rt of this.runtimes) if (rt.def.feeds) this.computeRuntime(rt)
+    if (this.hoverIndex === null) this.emitLegend()
+  }
+
+  /** A feed candle changed: indicators catch up on the next frame. */
+  feedsTicked() {
+    if (this.runtimes.some((rt) => rt.def.feeds)) this.indicatorsDirty = true
+  }
+
+  /** Bars of `seconds` from the matching feed, rolled up and remembered until the feed moves. */
+  private feedBars(seconds: number): Candle[] {
+    if (this.def && this.def.kind === 'fixed' && seconds === this.def.seconds) return this.bars
+    const g = granularityFor(seconds)
+    const source = this.feeds.get(g)?.candles ?? []
+    const last = source[source.length - 1]
+    const key = `${source.length}:${last?.time}:${last?.close}:${last?.volume}`
+    const id = `${g}:${seconds}`
+    const hit = this.feedCache.get(id)
+    if (hit && hit.key === key) return hit.bars
+    const bars = seconds === g ? source.slice() : aggregateSeconds(source, seconds)
+    this.feedCache.set(id, { key, bars })
+    return bars
+  }
+
+  private context(): ComputeContext {
+    return {
+      interval: this.def ?? { id: '1D', label: 'D', name: '1 day', group: 'days', kind: 'fixed', seconds: 86400, intraday: false },
+      feed: (seconds) => this.feedBars(seconds),
+      timeToIndex: (time) => this.timeToLogical(time) ?? 0,
+    }
+  }
+
   /** The indicator's values at the legend's bar, ready to print. */
   indicatorValues(id: string, index: number): LegendValue[] {
     const rt = this.runtimes.find((r) => r.inst.id === id)
@@ -381,7 +427,10 @@ export class ChartEngine {
   }
 
   private rebuildIndicators() {
-    for (const rt of this.runtimes) for (const s of rt.series.values()) this.chart.removeSeries(s)
+    for (const rt of this.runtimes) {
+      if (rt.drawing) this.chart.panes()[rt.pane]?.detachPrimitive(rt.drawing)
+      for (const s of rt.series.values()) this.chart.removeSeries(s)
+    }
     this.runtimes = []
     while (this.chart.panes().length > 1) this.chart.removePane(this.chart.panes().length - 1)
 
@@ -398,6 +447,10 @@ export class ChartEngine {
         series: new Map(),
         out: { values: {} },
         fill: null,
+        drawing: null,
+        pane,
+        heavy: false,
+        lastFull: 0,
         count: 0,
         inputsKey: JSON.stringify(inst.inputs),
         stylesKey: JSON.stringify(inst.styles) + inst.hidden,
@@ -447,6 +500,14 @@ export class ChartEngine {
           first.attachPrimitive(rt.fill)
         }
       }
+      // Drawings sit on the pane, placed on the scale of the indicator's first line (or the
+      // price series for drawing-only overlays such as Smart Money Concepts).
+      const reference = rt.series.values().next().value ?? (pane === 0 ? this.main : null)
+      const paneApi = this.chart.panes()[pane] ?? (pane === 0 ? null : this.chart.addPane())
+      if (reference && paneApi) {
+        rt.drawing = new DrawingPrimitive(reference)
+        paneApi.attachPrimitive(rt.drawing)
+      }
       this.runtimes.push(rt)
       this.computeRuntime(rt)
     }
@@ -470,10 +531,13 @@ export class ChartEngine {
   }
 
   private computeRuntime(rt: Runtime) {
-    rt.out = rt.def.compute(this.bars, { ...defaultInputs(rt.def), ...rt.inst.inputs }, rt.inst.styles)
+    rt.out = rt.def.compute(this.bars, { ...defaultInputs(rt.def), ...rt.inst.inputs }, rt.inst.styles, this.context())
     rt.count = this.bars.length
+    rt.lastFull = performance.now()
+    rt.heavy = !!rt.def.feeds || !!rt.out.drawings?.length
     for (const [key, series] of rt.series) series.setData(this.bars.map((_, i) => this.indicatorPoint(rt, key, i)))
     this.updateFills(rt)
+    rt.drawing?.set(rt.inst.hidden ? [] : (rt.out.drawings ?? []), this.bars.length - 1)
   }
 
   private indicatorPoint(rt: Runtime, key: string, i: number) {
@@ -501,12 +565,19 @@ export class ChartEngine {
   private syncIndicators() {
     this.indicatorsDirty = false
     const n = this.bars.length
+    const now = performance.now()
     for (const rt of this.runtimes) {
+      // Shapes and other-timeframe lines can move on any bar: redo them in full, four times a second.
+      if (rt.heavy) {
+        if (now - rt.lastFull >= 250) this.computeRuntime(rt)
+        else this.indicatorsDirty = true
+        continue
+      }
       if (rt.count !== n) {
         this.computeRuntime(rt)
         continue
       }
-      rt.out = rt.def.compute(this.bars, { ...defaultInputs(rt.def), ...rt.inst.inputs }, rt.inst.styles)
+      rt.out = rt.def.compute(this.bars, { ...defaultInputs(rt.def), ...rt.inst.inputs }, rt.inst.styles, this.context())
       for (const [key, series] of rt.series) series.update(this.indicatorPoint(rt, key, n - 1))
       this.updateFills(rt)
     }

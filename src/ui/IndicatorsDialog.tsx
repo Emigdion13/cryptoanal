@@ -3,7 +3,7 @@ import { INDICATORS } from '../indicators/catalog'
 import type { Category } from '../indicators/types'
 import { CloseIcon, SearchIcon } from './icons'
 
-const CATEGORIES: ('All' | Category)[] = ['All', 'Trend', 'Oscillators', 'Volatility', 'Volume']
+const CATEGORIES: ('All' | Category)[] = ['All', 'Trend', 'Oscillators', 'Volatility', 'Volume', 'Price Action']
 
 /** TradingView's "Indicators" dialog: search, categories, click a name to add it. */
 export function IndicatorsDialog(props: { onAdd: (type: string) => void; onClose: () => void }) {

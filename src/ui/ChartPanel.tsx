@@ -1,8 +1,8 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { ChartEngine, type CursorMode, type LegendState, type PaneRect } from '../chart/ChartEngine'
-import { parseInterval } from '../data/intervals'
+import { granularityFor, parseInterval } from '../data/intervals'
 import { describe, getProduct, type Catalog } from '../data/products'
-import { INDICATOR_BY_TYPE } from '../indicators/catalog'
+import { defaultInputs, INDICATOR_BY_TYPE } from '../indicators/catalog'
 import { useChartData } from '../useChartData'
 import { RealtimeIcon } from './icons'
 import { IndicatorRow, MainLegend, type IndicatorActions } from './Legend'
@@ -62,7 +62,19 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
   useEffect(() => engine?.setPaneSizes(state.paneSizes), [engine, state.paneSizes])
   useEffect(() => engine?.setIndicators(state.indicators), [engine, state.indicators])
 
-  const { status, showRange } = useChartData(engine, product, state.interval)
+  // Coinbase granularities the indicators read besides the chart's own bars.
+  const feedGranularities = useMemo(() => {
+    if (!interval) return []
+    const grans = new Set<number>()
+    for (const inst of state.indicators) {
+      const def = INDICATOR_BY_TYPE.get(inst.type)
+      if (!def?.feeds || inst.hidden) continue
+      for (const seconds of def.feeds({ ...defaultInputs(def), ...inst.inputs }, interval))
+        grans.add(granularityFor(seconds))
+    }
+    return [...grans].sort((a, b) => a - b)
+  }, [state.indicators, interval])
+  const { status, showRange } = useChartData(engine, product, state.interval, feedGranularities)
   useImperativeHandle(ref, () => ({ showRange: (from, iv) => showRange(from, iv, state.symbol) }), [showRange, state.symbol])
 
   const overlays = state.indicators.filter((i) => INDICATOR_BY_TYPE.get(i.type)?.overlay)

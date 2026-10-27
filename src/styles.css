@@ -1338,3 +1338,37 @@ button {
   color: var(--down);
   font-weight: 600;
 }
+
+.field-group {
+  margin: 14px 0 2px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.field-wrap:first-child .field-group {
+  margin-top: 0;
+}
+.field.check {
+  justify-content: flex-start;
+  flex-direction: row-reverse;
+  gap: 10px;
+}
+.field.check span {
+  flex: 1;
+}
+.field input[type='color'] {
+  width: 40px;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid #434343;
+  border-radius: 6px;
+  background: #000;
+  cursor: pointer;
+}
+.field-note {
+  color: var(--text-muted);
+}
+.settings-body {
+  gap: 8px;
+}

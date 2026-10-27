@@ -30,12 +30,14 @@ function withAlpha(hex: string, old: string): string {
 function InputField({ def, value, onChange }: { def: InputDef; value: InputValue; onChange: (v: InputValue) => void }) {
   if (def.type === 'bool')
     return <input type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} />
+  if (def.type === 'color')
+    return <input type="color" value={toHex(String(value))} onChange={(e) => onChange(e.target.value)} />
   if (def.type === 'source' || def.type === 'select')
     return (
       <select value={String(value)} onChange={(e) => onChange(e.target.value)}>
         {(def.type === 'source' ? SOURCES : def.options ?? []).map((o) => (
           <option key={o} value={o}>
-            {o}
+            {def.optionLabels?.[o] ?? o}
           </option>
         ))}
       </select>
@@ -103,12 +105,16 @@ export function IndicatorSettings({ inst, onChange, onClose }: Props) {
         </div>
         <div className="settings-body">
           {tab === 'inputs' &&
-            def.inputs.map((i) => (
-              <label key={i.key} className="field">
-                <span>{i.label}</span>
-                <InputField def={i} value={draft.inputs[i.key] ?? i.default} onChange={(v) => setInput(i.key, v)} />
-              </label>
+            def.inputs.map((i, k) => (
+              <div key={i.key} className="field-wrap">
+                {i.group && i.group !== def.inputs[k - 1]?.group && <div className="field-group">{i.group}</div>}
+                <label className={`field${i.type === 'bool' ? ' check' : ''}`}>
+                  <span>{i.label}</span>
+                  <InputField def={i} value={draft.inputs[i.key] ?? i.default} onChange={(v) => setInput(i.key, v)} />
+                </label>
+              </div>
             ))}
+          {tab === 'style' && !def.plots.length && <div className="field-note">This indicator's colors are set in Inputs.</div>}
           {tab === 'style' &&
             def.plots.map((p) => {
               const st = draft.styles[p.key]

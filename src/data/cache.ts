@@ -46,7 +46,9 @@ export class CandleCache {
   async ensureFrom(time: number, maxPages = 60): Promise<void> {
     let pages = 0
     while (!this.exhausted && pages < maxPages && (this.oldest ?? Infinity) > time) {
-      const step = Math.min(4, maxPages - pages)
+      // Only the pages that reach `time`, four at a time at most.
+      const needed = this.oldest === null ? 1 : Math.ceil((this.oldest - time) / (PAGE * this.granularity))
+      const step = Math.max(1, Math.min(4, needed, maxPages - pages))
       await this.loadOlder(step)
       pages += step
     }

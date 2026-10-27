@@ -138,6 +138,29 @@ function merge(into: Candle, c: Candle) {
   into.volume += c.volume
 }
 
+/** The biggest Coinbase candle size that splits `seconds` evenly (weeks and days use the daily). */
+export function granularityFor(seconds: number): Granularity {
+  let best: Granularity = 60
+  for (const g of GRANULARITIES) if (g <= seconds && seconds % g === 0) best = g
+  return best
+}
+
+/**
+ * Rolls candles up into bars of `seconds`: epoch-aligned, except multiples of a week, which start
+ * on Monday like TradingView's weekly bars. An open bucket keeps its partial values.
+ */
+export function aggregateSeconds(candles: readonly Candle[], seconds: number): Candle[] {
+  const offset = seconds % (7 * DAY) === 0 ? MONDAY : 0
+  const out: Candle[] = []
+  for (const c of candles) {
+    const start = Math.floor((c.time - offset) / seconds) * seconds + offset
+    const last = out[out.length - 1]
+    if (last && last.time === start) merge(last, c)
+    else out.push({ ...c, time: start })
+  }
+  return out
+}
+
 /** Rolls base candles (sorted, oldest first) up into bars of `def`. */
 export function aggregate(base: readonly Candle[], def: IntervalDef): Candle[] {
   if (def.kind === 'fixed' && base.length && baseGranularity(def) === def.seconds)

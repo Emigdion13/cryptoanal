@@ -22,7 +22,13 @@ interface PendingRange {
  * Feeds the chart: cached bars at once, then the newest page, enough history to fill the
  * screen, older pages as you scroll left, and live trades from the socket.
  */
-export function useChartData(engine: ChartEngine | null, product: Product, intervalId: string) {
+export function useChartData(
+  engine: ChartEngine | null,
+  product: Product,
+  intervalId: string,
+  /** Coinbase granularities the chart's indicators read besides its own (e.g. TMO Scalper's). */
+  feedGranularities: number[] = [],
+) {
   const [status, setStatus] = useState<DataStatus>('loading')
   const [attempt, setAttempt] = useState(0)
   const pending = useRef<PendingRange | null>(null)
@@ -110,6 +116,74 @@ export function useChartData(engine: ChartEngine | null, product: Product, inter
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [engine, product.id, product.precision, intervalId, attempt])
+
+  // Other-timeframe candles for indicators: as far back as the chart, kept live by the same trades.
+  const feedKey = feedGranularities.join(',')
+  useEffect(() => {
+    if (!engine) return
+    const grans = feedKey ? feedKey.split(',').map(Number) : []
+    if (!grans.length) {
+      engine.setFeeds(new Map())
+      return
+    }
+    const def = parseInterval(intervalId) ?? parseInterval('1D')!
+    const chartGran = baseGranularity(def)
+    const caches = grans.map((g) => getCache(product.id, g))
+    let alive = true
+    let syncing = false
+    /** The chart's first bar the feeds were last loaded back to. */
+    let coveredFrom = Infinity
+    const push = () => alive && engine.setFeeds(new Map(caches.map((c) => [c.granularity, c])))
+    /**
+     * Loads each feed back to the chart's first bar (40 pages at most: a year of 1m is too much).
+     * `latest` also refreshes the newest page (at the start, after a reconnect); otherwise only
+     * history the chart has newly scrolled into is fetched.
+     */
+    const sync = async (latest: boolean) => {
+      const first = engine.getBars()[0]?.time
+      if (syncing || (!latest && (first === undefined || first >= coveredFrom))) return
+      syncing = true
+      try {
+        for (const c of caches) {
+          if (latest) await c.loadLatest()
+          // Before the chart's bars are in, the newest page is all there is to match.
+          if (first !== undefined) await c.ensureFrom(first - 60 * c.granularity, 40)
+          if (!alive) return
+        }
+        coveredFrom = first ?? Infinity
+        push()
+      } catch {
+        // Retried when the chart loads more history or the socket reconnects.
+      } finally {
+        syncing = false
+      }
+    }
+    push()
+    void sync(true)
+    // The chart's own bars may still be loading: catch up with them once they're in.
+    let tries = 0
+    const settle = setInterval(() => {
+      if (++tries > 20 || coveredFrom !== Infinity) clearInterval(settle)
+      else void sync(false)
+    }, 1500)
+    // The chart's own cache already gets every trade; the others are folded in here.
+    const others = caches.filter((c) => c.granularity !== chartGran)
+    const offTrades = feed.subscribe('matches', product.id, (m) => {
+      let changed = false
+      for (const c of others) if (c.applyTrade(m.price, m.size, m.time)) changed = true
+      if (changed && alive) engine.feedsTicked()
+    })
+    // History the chart loads later (scrolling back) is matched once its new bars are in.
+    const offMore = engine.on('needMore', () => setTimeout(() => void sync(false), 1500))
+    const offReconnect = feed.onReconnect(() => void sync(true))
+    return () => {
+      alive = false
+      clearInterval(settle)
+      offTrades()
+      offMore()
+      offReconnect()
+    }
+  }, [engine, product.id, intervalId, feedKey])
 
   /** Shows `interval` bars from `from` to now, loading history as far back as needed. */
   const showRange = useCallback((from: number, interval: string, productId: string) => {

@@ -1,6 +1,7 @@
 import type { Candle } from '../data/types'
 import * as ta from './math'
 import type { IndicatorDef, IndicatorInstance, InputDef, InputValue, LevelDef, PlotStyle } from './types'
+import { cmUltMacd, msbZigZag, smartMoneyConcepts, tmoScalper, withDivergences } from './v2/defs'
 
 // TradingView's built-in palette.
 const BLUE = '#2962ff'
@@ -52,7 +53,7 @@ function bollinger(bars: readonly Candle[], i: Record<string, InputValue>) {
 const volumeColors = (bars: readonly Candle[], st: Record<string, PlotStyle>, key: string) =>
   bars.map((b) => (b.close >= b.open ? st[key].color : st[key].color2))
 
-export const INDICATORS: IndicatorDef[] = [
+const BUILT_IN: IndicatorDef[] = [
   {
     type: 'volume',
     name: 'Volume',
@@ -605,6 +606,15 @@ export const INDICATORS: IndicatorDef[] = [
       return { values: { cmf: ta.sum(ad, l).map((v, k) => v / vol[k]) } }
     },
   },
+]
+
+/** TradingView's built-ins (MACD with V2's divergences), then the btcAnalyzerV2 indicators. */
+export const INDICATORS: IndicatorDef[] = [
+  ...BUILT_IN.map((d) => (d.type === 'macd' ? withDivergences(d) : d)),
+  cmUltMacd,
+  tmoScalper,
+  msbZigZag,
+  smartMoneyConcepts,
 ]
 
 export const INDICATOR_BY_TYPE = new Map(INDICATORS.map((d) => [d.type, d]))
