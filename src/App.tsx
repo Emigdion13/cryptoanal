@@ -270,6 +270,8 @@ export function App() {
         onSync={(sync) => update({ sync })}
         onFullscreen={toggleFullscreen}
         onScreenshot={screenshot}
+        statusLine={settings.statusLine}
+        onStatusLine={(statusLine) => update({ statusLine })}
         saveControls={<LayoutControls ws={ws} />}
       />
       <LeftToolbar cursor={settings.cursor} onCursor={(cursor) => update({ cursor })} />
@@ -297,6 +299,7 @@ export function App() {
                 state={charts[i]}
                 catalog={catalog}
                 cursor={settings.cursor}
+                statusLine={settings.statusLine}
                 active={i === active}
                 outline={count > 1}
                 onActivate={(index) => index !== settings.active && update({ active: index })}

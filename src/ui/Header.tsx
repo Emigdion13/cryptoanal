@@ -4,7 +4,7 @@ import { INTERVAL_MENU, parseInterval, type IntervalGroup } from '../data/interv
 import type { Product } from '../data/types'
 import { useDismiss } from './common'
 import { LayoutMenu } from './LayoutMenu'
-import type { SyncOptions } from './settings'
+import { STATUS_LINE_DEFAULTS, type StatusLine, type SyncOptions } from './settings'
 import {
   CameraIcon,
   CHART_TYPE_ICONS,
@@ -13,6 +13,7 @@ import {
   ChevronRight,
   FloatIcon,
   FullscreenIcon,
+  GearIcon,
   FxIcon,
   SearchIcon,
   StarIcon,
@@ -44,6 +45,8 @@ interface Props {
   onChartType: (type: ChartType) => void
   onFullscreen: () => void
   onScreenshot: () => void
+  statusLine: StatusLine
+  onStatusLine: (statusLine: StatusLine) => void
   onIndicators: () => void
   /** The active chart's oscillators, for the Floating menu. */
   floating: { id: string; title: string; open: boolean }[]
@@ -105,6 +108,7 @@ export function Header(props: Props) {
       <div className="sep" />
       {props.saveControls}
       <div className="sep" />
+      <StatusLineMenu value={props.statusLine} onChange={props.onStatusLine} />
       <button className="tb-btn icon" onClick={props.onFullscreen} title="Fullscreen mode">
         <FullscreenIcon />
       </button>
@@ -262,6 +266,58 @@ function FloatingMenu(props: {
               <span className="menu-check" />
               <span className="menu-label">{count === 0 ? 'Open all' : 'Close all'}</span>
               <span className="menu-shortcut">Alt+0</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const STATUS_ROWS: { key: keyof StatusLine; label: string }[] = [
+  { key: 'logo', label: 'Logo' },
+  { key: 'title', label: 'Title' },
+  { key: 'ohlc', label: 'Chart values' },
+  { key: 'change', label: 'Bar change values' },
+  { key: 'indicatorTitles', label: 'Indicator titles' },
+  { key: 'indicatorArgs', label: 'Indicator arguments' },
+  { key: 'indicatorValues', label: 'Indicator values' },
+]
+
+/**
+ * TradingView's chart settings, Status line tab: which parts of the legends show — the symbol's
+ * logo and name, its OHLC and change, the indicators' titles, arguments and values. For every
+ * chart of the layout.
+ */
+function StatusLineMenu({ value, onChange }: { value: StatusLine; onChange: (v: StatusLine) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const close = useCallback(() => setOpen(false), [])
+  useDismiss(ref, open, close)
+  const changed = STATUS_ROWS.some(({ key }) => value[key] !== STATUS_LINE_DEFAULTS[key])
+
+  return (
+    <div className="dropdown" ref={ref}>
+      <button className={`tb-btn icon${open ? ' open' : ''}`} onClick={() => setOpen(!open)} title="Settings">
+        <GearIcon size={24} />
+      </button>
+      {open && (
+        <div className="menu status-menu">
+          <div className="menu-section static">STATUS LINE</div>
+          {STATUS_ROWS.map(({ key, label }) => (
+            <label key={key} className="menu-item switch-item">
+              <span className="menu-label">{label}</span>
+              <input
+                type="checkbox"
+                className="switch"
+                checked={value[key]}
+                onChange={(e) => onChange({ ...value, [key]: e.target.checked })}
+              />
+            </label>
+          ))}
+          {changed && (
+            <div className="menu-item" onClick={() => onChange(STATUS_LINE_DEFAULTS)}>
+              <span className="menu-label">Reset to defaults</span>
             </div>
           )}
         </div>

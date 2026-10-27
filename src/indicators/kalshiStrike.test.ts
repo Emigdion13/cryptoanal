@@ -25,7 +25,7 @@ const ctx = { interval: parseInterval('1')!, product: 'BTC-USD', feed: () => bar
 afterEach(() => vi.useRealTimers())
 
 describe('Kalshi Strike', () => {
-  it('steps through each window’s strike and badges the live one', () => {
+  it('with past windows on, steps through each window’s strike and badges the live one', () => {
     vi.useFakeTimers({ now: (T0 + 24 * 60 + 30) * 1000 })
     state.value = {
       status: 'live',
@@ -40,11 +40,20 @@ describe('Kalshi Strike', () => {
       },
     }
     const inst = createInstance('kalshiStrike')
-    const out = kalshiStrike.compute(bars, inst.inputs, inst.styles, ctx)
+    const out = kalshiStrike.compute(bars, { ...inst.inputs, showHistory: true }, inst.styles, ctx)
     expect(out.values.strike.slice(0, 15).every((v) => v === 98)).toBe(true)
     expect(out.values.strike.slice(15).every((v) => v === 102)).toBe(true)
     const badge = out.drawings?.find((d) => d.type === 'text')
     expect(badge && 'text' in badge && badge.text).toBe('▲ UP +3.00 · 05:30 · Yes 71¢')
+  })
+
+  it('by default only the live strike, as a line across the chart', () => {
+    vi.useFakeTimers({ now: (T0 + 24 * 60 + 30) * 1000 })
+    const inst = createInstance('kalshiStrike')
+    const out = kalshiStrike.compute(bars, inst.inputs, inst.styles, ctx)
+    expect(out.values.strike.slice(0, 15).every(Number.isNaN)).toBe(true)
+    expect(out.values.strike.slice(15).every((v) => v === 102)).toBe(true)
+    expect(out.drawings?.find((d) => d.type === 'line')).toEqual(expect.objectContaining({ x1: 0, y1: 102, extendRight: true }))
   })
 
   it('says why instead of drawing a guessed strike', () => {

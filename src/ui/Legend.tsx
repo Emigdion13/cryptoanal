@@ -4,6 +4,7 @@ import type { Product } from '../data/types'
 import { formatChange, formatPercent, formatPrice } from '../format'
 import { INDICATOR_BY_TYPE, instanceTitle } from '../indicators/catalog'
 import type { IndicatorInstance } from '../indicators/types'
+import type { StatusLine } from './settings'
 import { CoinLogo } from './common'
 import { canFloat } from './floatingModel'
 import { CloseIcon, EyeIcon, FloatIcon, GearIcon } from './icons'
@@ -18,20 +19,30 @@ export interface IndicatorActions {
 
 interface RowProps extends IndicatorActions {
   inst: IndicatorInstance
+  status: StatusLine
   product: Product
   engine: ChartEngine | null
   state: LegendState | null
 }
 
 /** One indicator in the legend: title, values, and TradingView's hover buttons. */
-export function IndicatorRow({ inst, product, engine, state, onToggle, onSettings, onRemove, onFloat }: RowProps) {
+export function IndicatorRow({ inst, status, product, engine, state, onToggle, onSettings, onRemove, onFloat }: RowProps) {
   const def = INDICATOR_BY_TYPE.get(inst.type)
   if (!def) return null
-  const title = def.type === 'volume' ? `Vol · ${product.base}` : instanceTitle(def, inst)
-  const values = engine && state && !inst.hidden ? engine.indicatorValues(inst.id, state.index) : []
+  // The volume's "· BTC" is the symbol's name: it goes with the symbol title.
+  const title = !status.indicatorTitles
+    ? ''
+    : def.type === 'volume'
+      ? status.indicatorArgs && status.title
+        ? `Vol · ${product.base}`
+        : 'Vol'
+      : status.indicatorArgs
+        ? instanceTitle(def, inst)
+        : def.short
+  const values = engine && state && !inst.hidden && status.indicatorValues ? engine.indicatorValues(inst.id, state.index) : []
   return (
     <div className={`legend-row ind-row${inst.hidden ? ' off' : ''}`} onDoubleClick={() => onSettings(inst.id)}>
-      <span className="ind-title">{title}</span>
+      {title && <span className="ind-title">{title}</span>}
       <span className="ind-values">
         {values.map((v) => (
           <b key={v.key} style={{ color: v.color }}>
@@ -64,6 +75,7 @@ export function IndicatorRow({ inst, product, engine, state, onToggle, onSetting
 }
 
 interface MainProps extends IndicatorActions {
+  status: StatusLine
   product: Product
   description: string
   interval: IntervalDef | null
@@ -73,7 +85,7 @@ interface MainProps extends IndicatorActions {
 }
 
 /** The price pane's legend: name, interval, exchange, OHLC and change, then its overlays. */
-export function MainLegend({ product, description, interval, state, engine, overlays, ...actions }: MainProps) {
+export function MainLegend({ status, product, description, interval, state, engine, overlays, ...actions }: MainProps) {
   const bar = state?.bar
   const p = product.precision
   const dir = bar ? (bar.close >= bar.open ? 'up' : 'down') : ''
@@ -83,14 +95,18 @@ export function MainLegend({ product, description, interval, state, engine, over
   return (
     <div className="legend">
       <div className="legend-row">
-        <span className="legend-title">
-          <CoinLogo symbol={product.base} />
-          <span>
-            {description} · {label} · Coinbase
+        {(status.logo || status.title) && (
+          <span className="legend-title">
+            {status.logo && <CoinLogo symbol={product.base} />}
+            {status.title && (
+              <span>
+                {description} · {label} · Coinbase
+              </span>
+            )}
           </span>
-        </span>
-        <span className="market-dot" title="Market open" />
-        {bar && (
+        )}
+        {status.title && <span className="market-dot" title="Market open" />}
+        {bar && status.ohlc && (
           <span className={`ohlc ${dir}`}>
             <span>
               O<b>{formatPrice(bar.open, p)}</b>
@@ -104,7 +120,7 @@ export function MainLegend({ product, description, interval, state, engine, over
             <span>
               C<b>{formatPrice(bar.close, p)}</b>
             </span>
-            {change !== null && (
+            {change !== null && status.change && (
               <b className={change >= 0 ? 'up' : 'down'}>
                 {formatChange(change, p)} ({formatPercent((change / state!.prevClose!) * 100)})
               </b>
@@ -113,7 +129,7 @@ export function MainLegend({ product, description, interval, state, engine, over
         )}
       </div>
       {overlays.map((inst) => (
-        <IndicatorRow key={inst.id} inst={inst} product={product} engine={engine} state={state} {...actions} />
+        <IndicatorRow key={inst.id} inst={inst} status={status} product={product} engine={engine} state={state} {...actions} />
       ))}
     </div>
   )

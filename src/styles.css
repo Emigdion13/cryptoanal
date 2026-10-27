@@ -1682,3 +1682,10 @@ button {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+
+/* TradingView's chart settings, Status line: near the right edge, so it opens to the left. */
+.status-menu {
+  left: auto;
+  right: 0;
+  min-width: 240px;
+}

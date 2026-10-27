@@ -16,6 +16,28 @@ export interface ChartState {
   paneSizes?: Record<string, number>
 }
 
+/** TradingView's Status line settings: what the legends on the charts show. */
+export interface StatusLine {
+  logo: boolean
+  /** The symbol's name, interval and exchange. */
+  title: boolean
+  ohlc: boolean
+  change: boolean
+  indicatorTitles: boolean
+  indicatorArgs: boolean
+  indicatorValues: boolean
+}
+
+export const STATUS_LINE_DEFAULTS: StatusLine = {
+  logo: true,
+  title: true,
+  ohlc: true,
+  change: true,
+  indicatorTitles: true,
+  indicatorArgs: true,
+  indicatorValues: true,
+}
+
 /** TradingView's "Sync in layout" options. */
 export interface SyncOptions {
   symbol: boolean
@@ -41,6 +63,7 @@ export interface Settings {
   currentLayoutId: string | null
   /** Save the current layout as it changes, as TradingView's Autosave does. */
   autosave: boolean
+  statusLine: StatusLine
 }
 
 export function newChart(from?: Partial<ChartState>): ChartState {
@@ -67,6 +90,7 @@ export function defaults(): Settings {
     watchlistOpen: typeof window !== 'undefined' && window.innerWidth >= 1100,
     currentLayoutId: null,
     autosave: true,
+    statusLine: STATUS_LINE_DEFAULTS,
   }
 }
 
@@ -78,6 +102,7 @@ function load(): Settings {
       ...base,
       ...saved,
       sync: { ...base.sync, ...saved.sync },
+      statusLine: { ...base.statusLine, ...saved.statusLine },
       charts: saved.charts?.length ? saved.charts : base.charts,
     }
   // The single-chart settings of the first version.

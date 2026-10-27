@@ -10,7 +10,7 @@ import { canFloat } from './floatingModel'
 import { useChartData } from '../useChartData'
 import { RealtimeIcon } from './icons'
 import { IndicatorRow, MainLegend, type IndicatorActions } from './Legend'
-import type { ChartState } from './settings'
+import type { ChartState, StatusLine } from './settings'
 
 export interface PanelHandle {
   showRange: (from: number, interval: string) => void
@@ -21,6 +21,7 @@ interface Props extends IndicatorActions {
   state: ChartState
   catalog: Catalog
   cursor: CursorMode
+  statusLine: StatusLine
   active: boolean
   /** Outline the active chart (only when there is more than one). */
   outline: boolean
@@ -107,6 +108,7 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
     >
       <div className="chart-host" ref={hostRef} />
       <MainLegend
+        status={props.statusLine}
         product={product}
         description={describe(catalog, product)}
         interval={interval}
@@ -120,7 +122,7 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
         if (!rect) return null
         return (
           <div key={inst.id} className="legend pane-legend" style={{ top: rect.top + 4 }}>
-            <IndicatorRow inst={inst} product={product} engine={engine} state={legend} {...actions} />
+            <IndicatorRow inst={inst} status={props.statusLine} product={product} engine={engine} state={legend} {...actions} />
           </div>
         )
       })}
