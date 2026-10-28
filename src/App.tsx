@@ -306,6 +306,7 @@ export function App() {
                 onEngine={onEngine}
                 onAutoScale={onAutoScale}
                 onPaneSizes={onPaneSizes}
+                onCollapseLegend={(legendCollapsed) => updateChart(i, { legendCollapsed })}
                 onToggle={(id) =>
                   setIndicators(i, (list) => list.map((x) => (x.id === id ? { ...x, hidden: !x.hidden } : x)))
                 }

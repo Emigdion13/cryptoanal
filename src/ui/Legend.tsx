@@ -7,7 +7,7 @@ import type { IndicatorInstance } from '../indicators/types'
 import type { StatusLine } from './settings'
 import { CoinLogo } from './common'
 import { canFloat } from './floatingModel'
-import { CloseIcon, EyeIcon, FloatIcon, GearIcon } from './icons'
+import { ChevronDown, CloseIcon, EyeIcon, FloatIcon, GearIcon } from './icons'
 
 export interface IndicatorActions {
   onToggle: (id: string) => void
@@ -82,10 +82,24 @@ interface MainProps extends IndicatorActions {
   state: LegendState | null
   engine: ChartEngine | null
   overlays: IndicatorInstance[]
+  /** The overlays' rows are folded away, as TradingView's arrow under the legend does. */
+  collapsed: boolean
+  onCollapse: (collapsed: boolean) => void
 }
 
 /** The price pane's legend: name, interval, exchange, OHLC and change, then its overlays. */
-export function MainLegend({ status, product, description, interval, state, engine, overlays, ...actions }: MainProps) {
+export function MainLegend({
+  status,
+  product,
+  description,
+  interval,
+  state,
+  engine,
+  overlays,
+  collapsed,
+  onCollapse,
+  ...actions
+}: MainProps) {
   const bar = state?.bar
   const p = product.precision
   const dir = bar ? (bar.close >= bar.open ? 'up' : 'down') : ''
@@ -128,9 +142,20 @@ export function MainLegend({ status, product, description, interval, state, engi
           </span>
         )}
       </div>
-      {overlays.map((inst) => (
-        <IndicatorRow key={inst.id} inst={inst} status={status} product={product} engine={engine} state={state} {...actions} />
-      ))}
+      {!collapsed &&
+        overlays.map((inst) => (
+          <IndicatorRow key={inst.id} inst={inst} status={status} product={product} engine={engine} state={state} {...actions} />
+        ))}
+      {overlays.length > 0 && (
+        <button
+          className={`legend-toggle${collapsed ? ' collapsed' : ''}`}
+          title={collapsed ? 'Show indicator legend' : 'Hide indicator legend'}
+          onClick={() => onCollapse(!collapsed)}
+        >
+          <ChevronDown />
+          {collapsed && <span>{overlays.length}</span>}
+        </button>
+      )}
     </div>
   )
 }

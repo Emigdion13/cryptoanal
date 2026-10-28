@@ -902,6 +902,32 @@ button {
 .pane-legend {
   top: 0;
 }
+.legend-toggle {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 20px;
+  min-width: 22px;
+  margin: 2px 0 0 1px;
+  padding: 0 3px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.legend-toggle:hover {
+  background: #3a3a3a;
+  color: var(--text);
+}
+/* Open, the arrow points up to fold the rows away; folded, down to bring them back. */
+.legend-toggle svg {
+  transform: rotate(180deg);
+}
+.legend-toggle.collapsed svg {
+  transform: none;
+}
 
 /* ── indicators dialog ──────────────────────────────────────────────────── */
 

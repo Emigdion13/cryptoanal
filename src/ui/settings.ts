@@ -14,6 +14,8 @@ export interface ChartState {
   indicators: IndicatorInstance[]
   /** Pane heights after dragging their separators: 'main' and indicator ids, relative. */
   paneSizes?: Record<string, number>
+  /** The price pane's indicator rows folded away behind the legend's arrow. */
+  legendCollapsed?: boolean
 }
 
 /** TradingView's Status line settings: what the legends on the charts show. */

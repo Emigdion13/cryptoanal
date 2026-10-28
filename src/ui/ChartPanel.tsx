@@ -29,6 +29,7 @@ interface Props extends IndicatorActions {
   onEngine: (index: number, engine: ChartEngine | null) => void
   onAutoScale: (index: number, on: boolean) => void
   onPaneSizes: (index: number, sizes: Record<string, number>) => void
+  onCollapseLegend: (collapsed: boolean) => void
   /** Moves, resizes, minimizes or closes an indicator's floating window. */
   onFloating: (id: string, patch: Partial<FloatingState>) => void
 }
@@ -115,6 +116,8 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
         state={legend}
         engine={engine}
         overlays={overlays}
+        collapsed={!!state.legendCollapsed}
+        onCollapse={props.onCollapseLegend}
         {...actions}
       />
       {panesBelow.map((inst, k) => {
