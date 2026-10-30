@@ -177,6 +177,7 @@ function ChartStack({ chart, statusLine, scaleFit }: { chart: ChartState; status
   useEffect(() => engine?.setChartType(chart.chartType), [engine, chart.chartType])
   useEffect(() => engine?.setPriceMode(chart.priceMode), [engine, chart.priceMode])
   useEffect(() => engine?.setScaleFit(scaleFit), [engine, scaleFit])
+  useEffect(() => engine?.setCenterPrice(!!chart.centerPrice), [engine, chart.centerPrice])
   useEffect(() => engine?.setProduct(product.id), [engine, product.id])
   useEffect(() => engine?.setPaneSizes(sizes), [engine, sizes])
   useEffect(() => engine?.setIndicators(indicators), [engine, indicators])

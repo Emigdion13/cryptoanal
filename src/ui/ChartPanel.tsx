@@ -32,6 +32,8 @@ interface Props extends IndicatorActions {
   onAutoScale: (index: number, on: boolean) => void
   onPaneSizes: (index: number, sizes: Record<string, number>) => void
   onCollapseLegend: (collapsed: boolean) => void
+  /** The engine turned center price off (Auto was turned on). */
+  onCenterPrice: (on: boolean) => void
   /** Moves, resizes, minimizes or closes an indicator's floating window. */
   onFloating: (id: string, patch: Partial<FloatingState>) => void
   /** The toolbar's favorite intervals, for the chart windows' headers. */
@@ -75,6 +77,10 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
   useEffect(() => engine?.setPriceMode(state.priceMode), [engine, state.priceMode])
   useEffect(() => engine?.setCursor(cursor), [engine, cursor])
   useEffect(() => engine?.setScaleFit(props.scaleFit), [engine, props.scaleFit])
+  useEffect(() => engine?.setCenterPrice(!!state.centerPrice), [engine, state.centerPrice])
+  const onCenterPrice = useRef(props.onCenterPrice)
+  onCenterPrice.current = props.onCenterPrice
+  useEffect(() => engine?.on('centerPrice', (on) => onCenterPrice.current(on)), [engine])
   useEffect(() => engine?.setProduct(product.id), [engine, product.id])
   // Kalshi's strike is polled only while this chart shows the Kalshi Strike indicator.
   const usesKalshi = state.indicators.some((i) => i.type === 'kalshiStrike' && !i.hidden)

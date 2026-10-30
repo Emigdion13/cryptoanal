@@ -70,6 +70,8 @@ interface Events {
   legend: LegendState | null
   needMore: void
   autoScale: boolean
+  /** Center price went off: Auto was turned on. */
+  centerPrice: boolean
   /** True while the newest bar is on screen. */
   realtime: boolean
   /** Where each pane sits in the chart, for the per-pane legends. */
@@ -109,6 +111,10 @@ interface PaneHeights {
 }
 
 const RIGHT_OFFSET = 8
+/** Center price: the share of the pane's height, around its middle, the price may wander in. */
+const CENTER_BOX = 0.4
+/** Center price: seconds the glide back to the middle takes to cover about two thirds of the way. */
+const CENTER_GLIDE = 0.25
 const DEFAULT_SPACING = 6
 const LEVEL_STYLE = { solid: LineStyle.Solid, dashed: LineStyle.Dashed, dotted: LineStyle.Dotted }
 
@@ -144,6 +150,15 @@ export class ChartEngine {
   private crosshairY: number | null = null
   private listeners = new Map<keyof Events, Set<(v: never) => void>>()
   private lastAuto = true
+  /** Center price is on: the engine keeps the price scale itself, Auto stays off. */
+  private centering = false
+  /** Gliding the price back to the middle; still while the price stays in the box. */
+  private gliding = false
+  /** Frames to let an internal auto-fit settle before center price takes the scale over again. */
+  private settleFrames = 0
+  private lastFrame = 0
+  /** A button is down on this chart: center price waits for it to let go. */
+  private pressing = false
   private lastRealtime = true
   private panesKey = ''
   private priceLabel: HTMLDivElement
@@ -240,6 +255,7 @@ export class ChartEngine {
       this.paintLabels()
       this.watchScale()
       this.watchPanes()
+      this.followPrice()
     }
     this.raf = requestAnimationFrame(loop)
   }
@@ -676,13 +692,13 @@ export class ChartEngine {
 
   /**
    * What the price axis fits while it scales itself: the price series, the indicators drawn over
-   * it, or both. With neither, it fits the price. Turns Auto on, so the change shows at once.
+   * it, or both. With neither, it fits the price. Fits the prices again, so the change shows at once.
    */
   setScaleFit(fit: { price: boolean; indicators: boolean }) {
     if (fit.price === this.fit.price && fit.indicators === this.fit.indicators) return
     this.fit = { ...fit }
     this.applyScaleFit()
-    this.setAutoScale(true)
+    this.fitPrices()
   }
 
   private applyScaleFit() {
@@ -694,9 +710,71 @@ export class ChartEngine {
           s.applyOptions({ autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => (this.fit.indicators ? original() : null) })
   }
 
+  /** The Auto button: turning it on turns center price off. */
   setAutoScale(on: boolean) {
+    if (on && this.centering) {
+      this.centering = false
+      this.emit('centerPrice', false)
+    }
     this.chart.priceScale('right').applyOptions({ autoScale: on })
     this.watchScale()
+  }
+
+  /** Prices back in view: auto-fit, or with center price on, a glide back to the middle. */
+  private fitPrices() {
+    if (this.centering) this.gliding = true
+    else this.setAutoScale(true)
+  }
+
+  /**
+   * Center price: the price may wander inside a box around the pane's middle without the chart
+   * moving; once it leaves the box, the chart glides until the price is in the middle again.
+   */
+  setCenterPrice(on: boolean) {
+    if (on === this.centering) return
+    this.centering = on
+    this.gliding = on
+    this.chart.priceScale('right').applyOptions({ autoScale: !on })
+    this.watchScale()
+  }
+
+  /** Every frame: center price's box check and glide. */
+  private followPrice() {
+    const now = performance.now()
+    const dt = Math.min(0.1, (now - this.lastFrame) / 1000)
+    this.lastFrame = now
+    const n = this.bars.length
+    if (!this.centering || !this.main || !n || this.pressing || this.priceMode === 'percent') return
+    const scale = this.chart.priceScale('right')
+    if (scale.options().autoScale) {
+      // Another symbol or interval fitted the prices: keep that zoom, then center on it.
+      if (this.settleFrames === 0) this.settleFrames = 3
+      if (--this.settleFrames > 0) return
+      scale.applyOptions({ autoScale: false })
+      this.gliding = true
+    }
+    const range = scale.getVisibleRange()
+    const price = this.source()[n - 1].close
+    if (!range || !(range.to > range.from)) return
+    const log = this.priceMode === 'log' && range.from > 0 && price > 0
+    const f = log ? Math.log : (v: number) => v
+    const back = log ? Math.exp : (v: number) => v
+    const lo = f(range.from),
+      hi = f(range.to),
+      p = f(price)
+    const span = hi - lo,
+      mid = (lo + hi) / 2
+    const off = (p - mid) / span
+    if (!this.gliding && Math.abs(off) > CENTER_BOX / 2) this.gliding = true
+    if (!this.gliding) return
+    if (Math.abs(off) < 0.005) {
+      this.gliding = false
+      return
+    }
+    // Eases out, the same speed at any frame rate; far off-screen it closes the gap at once.
+    const step = Math.abs(off) > 1.5 ? 1 : 1 - Math.exp(-dt / CENTER_GLIDE)
+    const next = mid + (p - mid) * step
+    scale.setVisibleRange({ from: back(next - span / 2), to: back(next + span / 2) })
   }
 
   setCursor(mode: CursorMode) {
@@ -719,7 +797,7 @@ export class ChartEngine {
   reset() {
     this.chart.applyOptions({ timeScale: { barSpacing: DEFAULT_SPACING } })
     this.chart.timeScale().scrollToPosition(RIGHT_OFFSET, false)
-    this.setAutoScale(true)
+    this.fitPrices()
   }
 
   /** Arrow keys: move by `bars` (negative = back in time). */
@@ -740,7 +818,7 @@ export class ChartEngine {
     if (i < 0) i = this.bars.length - 1
     const last = this.bars.length - 1
     this.chart.timeScale().setVisibleLogicalRange({ from: i - 0.5, to: last + 2 })
-    this.setAutoScale(true)
+    this.fitPrices()
   }
 
   // ── sync between charts of a layout ─────────────────────────────────────
@@ -1145,6 +1223,7 @@ export class ChartEngine {
     let pressed: PaneHeights | null = null
     const onDown = (event: PointerEvent) => {
       drag = null
+      this.pressing = true
       pressed = { structure: this.structure, heights: chart.panes().map((p) => p.getHeight()) }
       // A finger's vertical swipe scrolls the page (the phone's stacked panes), never the price.
       if (event.button !== 0 || event.pointerType === 'touch' || hit(event) !== 'plot' || this.priceMode === 'percent') return
@@ -1176,6 +1255,7 @@ export class ChartEngine {
     }
     const onUp = () => {
       drag = null
+      this.pressing = false
       // A pane separator may just have been dragged. Only a press on this chart counts: a click
       // elsewhere (a legend button, the Indicators dialog) can rebuild the panes, and their
       // heights mid-rebuild are not sizes anyone chose.

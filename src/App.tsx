@@ -377,6 +377,7 @@ export function App() {
                 onAutoScale={onAutoScale}
                 onPaneSizes={onPaneSizes}
                 onCollapseLegend={(legendCollapsed) => updateChart(i, { legendCollapsed })}
+                onCenterPrice={(centerPrice) => updateChart(i, { centerPrice })}
                 onToggle={(id) =>
                   setIndicators(i, (list) => list.map((x) => (x.id === id ? { ...x, hidden: !x.hidden } : x)))
                 }
@@ -397,9 +398,11 @@ export function App() {
         <BottomBar
           priceMode={chart.priceMode}
           autoScale={autoScales[active] ?? true}
+          centerPrice={!!chart.centerPrice}
           onRange={pickRange}
           onPriceMode={(priceMode) => updateChart(active, { priceMode })}
           onAutoScale={(on) => activeEngine()?.setAutoScale(on)}
+          onCenterPrice={(centerPrice) => updateChart(active, { centerPrice })}
         />
       </main>
       {settings.watchlistOpen && (

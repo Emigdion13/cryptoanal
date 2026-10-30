@@ -34,9 +34,11 @@ export const RANGES: RangePreset[] = [
 interface Props {
   priceMode: PriceMode
   autoScale: boolean
+  centerPrice: boolean
   onRange: (r: RangePreset) => void
   onPriceMode: (mode: PriceMode) => void
   onAutoScale: (on: boolean) => void
+  onCenterPrice: (on: boolean) => void
 }
 
 export function BottomBar(props: Props) {
@@ -79,6 +81,13 @@ export function BottomBar(props: Props) {
         onClick={() => props.onAutoScale(!props.autoScale)}
       >
         auto
+      </button>
+      <button
+        className={`bb-btn${props.centerPrice ? ' on' : ''}`}
+        title="Keep the price near the middle: the chart moves only when the price leaves the middle of the chart"
+        onClick={() => props.onCenterPrice(!props.centerPrice)}
+      >
+        center
       </button>
     </div>
   )

@@ -14,6 +14,8 @@ export interface ChartState {
   indicators: IndicatorInstance[]
   /** Pane heights after dragging their separators: 'main' and indicator ids, relative. */
   paneSizes?: Record<string, number>
+  /** Center price: the chart glides to keep the price near the middle (Auto off). */
+  centerPrice?: boolean
   /** The price pane's indicator rows folded away behind the legend's arrow. */
   legendCollapsed?: boolean
   /** Floating charts over this one, each at its own interval with its own indicators. */
