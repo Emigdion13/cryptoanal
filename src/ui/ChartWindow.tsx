@@ -3,6 +3,7 @@ import { ChartEngine, type ChartType, type CursorMode, type LegendState, type Pa
 import { INTERVAL_MENU, parseInterval } from '../data/intervals'
 import { watchKalshi } from '../data/kalshi'
 import { describe, type Catalog } from '../data/products'
+import { useDrawings } from '../drawings/context'
 import type { Product } from '../data/types'
 import { INDICATOR_BY_TYPE } from '../indicators/catalog'
 import type { IndicatorInstance } from '../indicators/types'
@@ -283,6 +284,7 @@ function WindowChart({
   useEffect(() => engine?.setProduct(product.id), [engine, product.id])
   useEffect(() => engine?.setPaneSizes(win.paneSizes), [engine, win.paneSizes])
   useEffect(() => engine?.setIndicators(win.indicators), [engine, win.indicators])
+  useDrawings(engine, product.id)
   const usesKalshi = win.indicators.some((i) => i.type === 'kalshiStrike' && !i.hidden)
   useEffect(() => {
     if (!engine || !usesKalshi) return

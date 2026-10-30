@@ -5,6 +5,7 @@ import { watchKalshi } from '../data/kalshi'
 import { describe, getProduct, useCatalog } from '../data/products'
 import { defaultInputs, INDICATOR_BY_TYPE } from '../indicators/catalog'
 import type { IndicatorInstance } from '../indicators/types'
+import type { UserDrawing } from '../drawings/types'
 import { useChartData } from '../useChartData'
 import { CoinLogo } from '../ui/common'
 import { IndicatorRow, MainLegend } from '../ui/Legend'
@@ -25,6 +26,8 @@ interface Desktop {
   active: number
   statusLine: Settings['statusLine']
   scaleFit: Settings['scaleFit']
+  /** Each symbol's drawings, unless the desktop hides them. */
+  drawings: Settings['drawings']
 }
 
 /** The desktop's settings as the workspace file has them, filled in as the desktop's own load does. */
@@ -38,6 +41,7 @@ function readDesktop(settings: Partial<Settings> | null): Desktop {
     active: Math.min(Math.max(0, settings?.active ?? 0), charts.length - 1),
     statusLine: { ...STATUS_LINE_DEFAULTS, ...settings?.statusLine },
     scaleFit: { ...SCALE_FIT_DEFAULTS, ...settings?.scaleFit },
+    drawings: settings?.drawingPrefs?.hidden ? {} : (settings?.drawings ?? {}),
   }
 }
 
@@ -114,7 +118,7 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
       )}
       {problem && <div className="phone-problem">{problem}</div>}
       {chart && desktop ? (
-        <ChartStack chart={chart} statusLine={desktop.statusLine} scaleFit={desktop.scaleFit} />
+        <ChartStack chart={chart} statusLine={desktop.statusLine} scaleFit={desktop.scaleFit} drawings={desktop.drawings[chart.symbol]} />
       ) : (
         !problem && <div className="phone-wait">Reading the desktop's chart…</div>
       )}
@@ -138,7 +142,17 @@ function ChartTitle({ chart }: { chart: ChartState }) {
   )
 }
 
-function ChartStack({ chart, statusLine, scaleFit }: { chart: ChartState; statusLine: Desktop['statusLine']; scaleFit: Desktop['scaleFit'] }) {
+function ChartStack({
+  chart,
+  statusLine,
+  scaleFit,
+  drawings,
+}: {
+  chart: ChartState
+  statusLine: Desktop['statusLine']
+  scaleFit: Desktop['scaleFit']
+  drawings: UserDrawing[] | undefined
+}) {
   const catalog = useCatalog()
   const product = getProduct(catalog, chart.symbol)
   const interval = parseInterval(chart.interval)
@@ -178,6 +192,8 @@ function ChartStack({ chart, statusLine, scaleFit }: { chart: ChartState; status
   useEffect(() => engine?.setPriceMode(chart.priceMode), [engine, chart.priceMode])
   useEffect(() => engine?.setScaleFit(scaleFit), [engine, scaleFit])
   useEffect(() => engine?.setCenterPrice(!!chart.centerPrice), [engine, chart.centerPrice])
+  // Drawn on the desktop; the phone only shows them.
+  useEffect(() => engine?.setDrawings(drawings ?? []), [engine, drawings])
   useEffect(() => engine?.setProduct(product.id), [engine, product.id])
   useEffect(() => engine?.setPaneSizes(sizes), [engine, sizes])
   useEffect(() => engine?.setIndicators(indicators), [engine, indicators])

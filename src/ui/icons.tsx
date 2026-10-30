@@ -226,3 +226,108 @@ export const CHART_TYPE_ICONS: Record<ChartType, (p: IconProps) => ReactNode> = 
     </Icon>
   ),
 }
+
+// ── drawings ──────────────────────────────────────────────────────────────
+
+export const DRAWING_ICONS = {
+  lines: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="M7.5 20.5 20.5 7.5" />
+      <circle cx="6.5" cy="21.5" r="1.5" />
+      <circle cx="21.5" cy="6.5" r="1.5" />
+    </Icon>
+  ),
+  fib: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="M5 7.5h18M5 12.5h18M5 17h18M5 21.5h18" />
+      <path d="M8 21.5 20 7.5" strokeDasharray="2 2" />
+    </Icon>
+  ),
+  patterns: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="m5 19 5-9 4 6 4-9 5 12" strokeLinejoin="round" />
+    </Icon>
+  ),
+  forecast: (p: IconProps) => (
+    <Icon {...p}>
+      <rect x="6.5" y="6.5" width="15" height="7" />
+      <rect x="6.5" y="13.5" width="15" height="8" strokeDasharray="2 2" />
+    </Icon>
+  ),
+  shapes: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="M6 20c3-1 4-9 8-9s3 6 8 3" strokeLinecap="round" />
+      <path d="m19.5 5.5 3 3-7 7-3.5.5.5-3.5z" strokeLinejoin="round" />
+    </Icon>
+  ),
+  text: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="M8 8h12M14 8v13M11.5 21h5" />
+    </Icon>
+  ),
+  magnet: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="M8 7v7a6 6 0 0 0 12 0V7h-4v7a2 2 0 0 1-4 0V7z" strokeLinejoin="round" />
+      <path d="M8 10.5h4M16 10.5h4" />
+    </Icon>
+  ),
+  stay: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="m16.5 6.5 4 4-9 9-5 1 1-5z" strokeLinejoin="round" />
+      <path d="M17 21.5h5M19.5 19v5" />
+    </Icon>
+  ),
+  lock: (p: IconProps) => (
+    <Icon {...p}>
+      <rect x="8.5" y="13.5" width="11" height="8" rx="1" />
+      <path d="M10.5 13.5v-3a3.5 3.5 0 0 1 7 0v3" />
+    </Icon>
+  ),
+  unlock: (p: IconProps) => (
+    <Icon {...p}>
+      <rect x="8.5" y="13.5" width="11" height="8" rx="1" />
+      <path d="M10.5 13.5v-3a3.5 3.5 0 0 1 6.8-1.2" />
+    </Icon>
+  ),
+  eye: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="M5 14s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z" />
+      <circle cx="14" cy="14" r="2.5" />
+    </Icon>
+  ),
+  eyeOff: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="M5 14s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z" />
+      <circle cx="14" cy="14" r="2.5" />
+      <path d="m7 21 14-14" />
+    </Icon>
+  ),
+  trash: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="M7 9h14M11.5 9V7h5v2M9 9l1 12.5h8L19 9M12.5 12v6.5M15.5 12v6.5" strokeLinejoin="round" />
+    </Icon>
+  ),
+  fill: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="m13 6 8 8-6 6-8-8z" strokeLinejoin="round" />
+      <path d="M7 12h14" />
+      <path d="M22 18.5c0 1.2-.7 2-1.5 2s-1.5-.8-1.5-2 1.5-3 1.5-3 1.5 1.8 1.5 3z" fill="currentColor" />
+    </Icon>
+  ),
+  extendLeft: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="M4 14h15" strokeDasharray="2 2" />
+      <path d="M12 14h9" />
+      <circle cx="21.5" cy="14" r="1.5" />
+      <path d="m7 11-3 3 3 3" />
+    </Icon>
+  ),
+  extendRight: (p: IconProps) => (
+    <Icon {...p}>
+      <path d="M9 14h15" strokeDasharray="2 2" />
+      <path d="M7 14h9" />
+      <circle cx="6.5" cy="14" r="1.5" />
+      <path d="m21 11 3 3-3 3" />
+    </Icon>
+  ),
+}

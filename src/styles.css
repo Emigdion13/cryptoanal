@@ -86,6 +86,7 @@ button {
 }
 
 .center {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -310,6 +311,162 @@ button {
   opacity: 0.6;
 }
 
+/* The corner arrow opens the flyout: a bigger target than the arrow itself. */
+.side-arrow.hit::after {
+  content: '';
+  position: absolute;
+  inset: -9px -4px -6px -9px;
+}
+.side-sep {
+  width: 32px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+.tools-flyout {
+  min-width: 250px;
+  max-height: min(70vh, 640px);
+}
+.menu-item.disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+.menu-item.disabled:hover {
+  background: none;
+}
+
+/* ── drawing toolbar ────────────────────────────────────────────────────── */
+
+.drawing-toolbar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px 3px 10px;
+  background: var(--menu);
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  font-size: 12px;
+  max-width: calc(100% - 16px);
+}
+.drawing-name {
+  margin-right: 6px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dt-anchor {
+  position: relative;
+}
+.dt-btn {
+  height: 30px;
+  min-width: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--text);
+}
+.dt-btn:hover:not(:disabled) {
+  background: var(--hover);
+}
+.dt-btn.on {
+  color: var(--active);
+}
+.dt-btn:disabled {
+  opacity: 0.35;
+}
+.dt-btn svg {
+  width: 24px;
+  height: 24px;
+}
+.dt-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.dt-width {
+  display: block;
+  width: 18px;
+  background: currentColor;
+  border-radius: 1px;
+}
+.dt-width.wide,
+.dt-dash.wide {
+  width: 48px;
+}
+.dt-dash {
+  display: block;
+  width: 18px;
+  border-top: 2px solid currentColor;
+}
+.dt-dash.dashed {
+  border-top-style: dashed;
+}
+.dt-dash.dotted {
+  border-top-style: dotted;
+}
+.dt-text {
+  padding: 0 4px;
+}
+.dt-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  min-width: 120px;
+  padding: 6px 0;
+  background: var(--menu);
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+.dt-colors {
+  display: grid;
+  grid-template-columns: repeat(5, 22px);
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+}
+.dt-color {
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.dt-color.on {
+  outline: 2px solid var(--active);
+  outline-offset: 1px;
+}
+.dt-input {
+  width: 160px;
+  height: 26px;
+  margin: 0 4px;
+  padding: 4px 6px;
+  resize: none;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: inherit;
+  line-height: 16px;
+}
+.dt-input:focus {
+  outline: none;
+  border-color: var(--active);
+}
+.dt-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
 /* ── legend ─────────────────────────────────────────────────────────────── */
 
 .legend {
@@ -430,6 +587,16 @@ button {
 }
 .chart-host[data-cursor='arrow'] table tr:first-child td:nth-child(2) canvas {
   cursor: default !important;
+}
+/* Drawings: placing with a tool, and over a drawing (move it) or its handle (move the point). */
+.chart-host[data-draw-tool='1'] table tr:first-child td:nth-child(2) canvas {
+  cursor: crosshair !important;
+}
+.chart-host[data-draw-cursor='move']:not([data-draw-tool='1']) table tr:first-child td:nth-child(2) canvas {
+  cursor: move !important;
+}
+.chart-host[data-draw-cursor='handle']:not([data-draw-tool='1']) table tr:first-child td:nth-child(2) canvas {
+  cursor: pointer !important;
 }
 
 /* ── bottom bar ─────────────────────────────────────────────────────────── */

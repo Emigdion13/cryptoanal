@@ -8,6 +8,9 @@ import { formatPercent, formatPrice } from './format'
 import { createInstance, INDICATOR_BY_TYPE, instanceTitle } from './indicators/catalog'
 import type { FloatingState, IndicatorInstance } from './indicators/types'
 import { canFloat } from './ui/floatingModel'
+import { DrawingsContext, type DrawingSelection, type DrawingsApi } from './drawings/context'
+import type { UserDrawing } from './drawings/types'
+import { DrawingToolbar } from './ui/DrawingToolbar'
 import { BottomBar, type RangePreset } from './ui/BottomBar'
 import { ChartPanel, type PanelHandle } from './ui/ChartPanel'
 import { Header } from './ui/Header'
@@ -18,7 +21,7 @@ import { onSaveProblem } from './data/workspace'
 import { LayoutControls } from './ui/LayoutControls'
 import { LayoutGrid, sizesFor } from './ui/LayoutGrid'
 import { LAYOUT_BY_ID, LAYOUTS } from './ui/layouts'
-import { newChart, useSettings, type ChartState, type ChartWindowState } from './ui/settings'
+import { newChart, useSettings, type ChartState, type ChartWindowState, type Settings } from './ui/settings'
 import type { ChartWindowActions } from './ui/ChartWindow'
 import { newChartWindow } from './ui/chartWindows'
 import { PhoneAccessDialog } from './ui/PhoneAccessDialog'
@@ -74,6 +77,71 @@ export function App() {
   const [indicatorsFor, setIndicatorsFor] = useState<IndicatorTarget | null>(null)
   const [phoneOpen, setPhoneOpen] = useState(false)
   const [editing, setEditing] = useState<(IndicatorTarget & { id: string }) | null>(null)
+
+  // Drawings: the tool the next clicks place, the drawing selected on one of the charts, and undo.
+  const [tool, setTool] = useState<string | null>(null)
+  const [selection, setSelection] = useState<(DrawingSelection & { fresh: boolean }) | null>(null)
+  const drawingsRef = useRef(settings.drawings)
+  drawingsRef.current = settings.drawings
+  const undoStack = useRef<{ drawings: Settings['drawings']; at: number; typing?: string }[]>([])
+  /**
+   * Changes the drawings, remembering the ones before for ⌘Z. `typing` (a drawing's id) makes
+   * a run of keystrokes in its text one step.
+   */
+  const setDrawings = useCallback(
+    (fn: (all: Settings['drawings']) => Settings['drawings'], typing?: string) => {
+      const stack = undoStack.current
+      const top = stack[stack.length - 1]
+      const now = Date.now()
+      if (typing && top?.typing === typing && now - top.at < 1500) top.at = now
+      else stack.push({ drawings: drawingsRef.current, at: now, typing })
+      if (stack.length > 50) stack.shift()
+      update((s) => ({ drawings: fn(s.drawings) }))
+    },
+    [update],
+  )
+  const changeSymbolDrawings = useCallback(
+    (symbol: string, list: UserDrawing[], typing?: string) =>
+      setDrawings((all) => {
+        const next = { ...all, [symbol]: list }
+        if (!list.length) delete next[symbol]
+        return next
+      }, typing),
+    [setDrawings],
+  )
+  const undoDrawings = useCallback(() => {
+    const prev = undoStack.current.pop()
+    if (prev) update({ drawings: prev.drawings })
+  }, [update])
+  const stayRef = useRef(settings.drawingPrefs.stay)
+  stayRef.current = settings.drawingPrefs.stay
+  const toolRef = useRef(tool)
+  toolRef.current = tool
+  const drawingsApi = useMemo<DrawingsApi>(
+    () => ({
+      bySymbol: settings.drawings,
+      tool,
+      prefs: settings.drawingPrefs,
+      selection,
+      change: changeSymbolDrawings,
+      toolDone: (cancelled) => {
+        if (cancelled || !stayRef.current) setTool(null)
+      },
+      select: (chart, symbol, id) =>
+        setSelection((s) =>
+          id ? { chart, symbol, id, fresh: toolRef.current !== null } : s?.chart === chart ? null : s,
+        ),
+    }),
+    [settings.drawings, settings.drawingPrefs, tool, selection, changeSymbolDrawings],
+  )
+  const selected = selection ? settings.drawings[selection.symbol]?.find((d) => d.id === selection.id) : undefined
+  const patchSelected = (patch: Partial<UserDrawing>) =>
+    selection &&
+    changeSymbolDrawings(
+      selection.symbol,
+      (settings.drawings[selection.symbol] ?? []).map((d) => (d.id === selection.id ? { ...d, ...patch } : d)),
+      'text' in patch ? selection.id : undefined,
+    )
 
   const onEngine = useCallback((index: number, engine: ChartEngine | null) => {
     if (engine) engines.current.set(index, engine)
@@ -263,7 +331,10 @@ export function App() {
       const target = e.target as HTMLElement
       if (target.closest?.('input, textarea, select, [contenteditable]') || modalOpen) return
       const engine = engines.current.get(active)
-      if (e.altKey && e.code === 'KeyR') {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === 'KeyZ') {
+        e.preventDefault()
+        undoDrawings()
+      } else if (e.altKey && e.code === 'KeyR') {
         e.preventDefault()
         engine?.reset()
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && /^Digit[0-9]$/.test(e.code)) {
@@ -301,164 +372,188 @@ export function App() {
   const indicatorsWindow = indicatorsFor?.window ? charts[indicatorsFor.chart]?.windows?.find((w) => w.id === indicatorsFor.window) : undefined
 
   return (
-    <div
-      className="app"
-      style={{
-        gridTemplateColumns: settings.watchlistOpen ? '52px minmax(0, 1fr) 300px 45px' : '52px minmax(0, 1fr) 45px',
-      }}
-    >
-      <Header
-        product={product}
-        interval={chart.interval}
-        favorites={settings.favorites}
-        chartType={chart.chartType}
-        layout={layout.id}
-        sync={settings.sync}
-        onSymbolSearch={() => setSearch({ initial: '', mode: 'symbol' })}
-        onInterval={(id) => updateChart(active, { interval: id })}
-        onFavorites={(favorites) => update({ favorites })}
-        onChartType={(chartType) => updateChart(active, { chartType })}
-        onIndicators={() => setIndicatorsFor({ chart: active })}
-        floating={floatables.map((i) => ({
-          id: i.id,
-          title: instanceTitle(INDICATOR_BY_TYPE.get(i.type)!, i),
-          open: !!i.floating?.open,
-        }))}
-        onFloat={toggleFloating}
-        onFloatAll={setAllFloating}
-        windows={activeWindows.map((w) => ({
-          id: w.id,
-          title: `${getProduct(catalog, w.symbol ?? chart.symbol).ticker} · ${intervalName(w.interval)}`,
-        }))}
-        onNewWindow={openWindow}
-        onCloseWindow={(id) => setWindows(active, (list) => list.filter((w) => w.id !== id))}
-        onLayout={pickLayout}
-        onSync={(sync) => update({ sync })}
-        onFullscreen={toggleFullscreen}
-        onScreenshot={screenshot}
-        statusLine={settings.statusLine}
-        onStatusLine={(statusLine) => update({ statusLine })}
-        scaleFit={settings.scaleFit}
-        onScaleFit={(scaleFit) => update({ scaleFit })}
-        onPhoneAccess={() => setPhoneOpen(true)}
-        saveControls={<LayoutControls ws={ws} />}
-      />
-      <LeftToolbar cursor={settings.cursor} onCursor={(cursor) => update({ cursor })} />
-      <main className="center">
-        <LayoutGrid
-          layout={layout}
-          sizes={sizesFor(layout, settings.splits[layout.id])}
-          onSizes={(sizes) => update((s) => ({ splits: { ...s.splits, [layout.id]: sizes } }))}
-        >
-          {layout.cells.map((cell, i) => (
-            <div
-              key={i}
-              className="layout-cell"
-              style={{ gridArea: cell.join(' / ') }}
-              onPointerEnter={() => (hovered.current = i)}
-              onPointerMoveCapture={() => (hovered.current = i)}
-              onWheelCapture={() => (hovered.current = i)}
-              onPointerLeave={() => hovered.current === i && (hovered.current = null)}
-            >
-              <ChartPanel
-                ref={(h) => {
-                  panels.current[i] = h
-                }}
-                index={i}
-                state={charts[i]}
-                catalog={catalog}
-                cursor={settings.cursor}
-                statusLine={settings.statusLine}
-                scaleFit={settings.scaleFit}
-                active={i === active}
-                outline={count > 1}
-                onActivate={(index) => index !== settings.active && update({ active: index })}
-                onEngine={onEngine}
-                onAutoScale={onAutoScale}
-                onPaneSizes={onPaneSizes}
-                onCollapseLegend={(legendCollapsed) => updateChart(i, { legendCollapsed })}
-                onCenterPrice={(centerPrice) => updateChart(i, { centerPrice })}
-                onToggle={(id) =>
-                  setIndicators(i, (list) => list.map((x) => (x.id === id ? { ...x, hidden: !x.hidden } : x)))
-                }
-                onSettings={(id) => setEditing({ chart: i, id })}
-                onRemove={(id) => setIndicators(i, (list) => list.filter((x) => x.id !== id))}
-                onFloat={(id) =>
-                  setIndicators(i, (list) =>
-                    list.map((x) => (x.id === id ? { ...x, floating: { ...x.floating, open: !x.floating?.open } } : x)),
-                  )
-                }
-                onFloating={(id, patch) => setFloating(i, id, patch)}
-                favorites={settings.favorites}
-                windowActions={windowActions(i)}
-              />
-            </div>
-          ))}
-        </LayoutGrid>
-        <BottomBar
-          priceMode={chart.priceMode}
-          autoScale={autoScales[active] ?? true}
-          centerPrice={!!chart.centerPrice}
-          onRange={pickRange}
-          onPriceMode={(priceMode) => updateChart(active, { priceMode })}
-          onAutoScale={(on) => activeEngine()?.setAutoScale(on)}
-          onCenterPrice={(centerPrice) => updateChart(active, { centerPrice })}
+    <DrawingsContext.Provider value={drawingsApi}>
+      <div
+        className="app"
+        style={{
+          gridTemplateColumns: settings.watchlistOpen ? '52px minmax(0, 1fr) 300px 45px' : '52px minmax(0, 1fr) 45px',
+        }}
+      >
+        <Header
+          product={product}
+          interval={chart.interval}
+          favorites={settings.favorites}
+          chartType={chart.chartType}
+          layout={layout.id}
+          sync={settings.sync}
+          onSymbolSearch={() => setSearch({ initial: '', mode: 'symbol' })}
+          onInterval={(id) => updateChart(active, { interval: id })}
+          onFavorites={(favorites) => update({ favorites })}
+          onChartType={(chartType) => updateChart(active, { chartType })}
+          onIndicators={() => setIndicatorsFor({ chart: active })}
+          floating={floatables.map((i) => ({
+            id: i.id,
+            title: instanceTitle(INDICATOR_BY_TYPE.get(i.type)!, i),
+            open: !!i.floating?.open,
+          }))}
+          onFloat={toggleFloating}
+          onFloatAll={setAllFloating}
+          windows={activeWindows.map((w) => ({
+            id: w.id,
+            title: `${getProduct(catalog, w.symbol ?? chart.symbol).ticker} · ${intervalName(w.interval)}`,
+          }))}
+          onNewWindow={openWindow}
+          onCloseWindow={(id) => setWindows(active, (list) => list.filter((w) => w.id !== id))}
+          onLayout={pickLayout}
+          onSync={(sync) => update({ sync })}
+          onFullscreen={toggleFullscreen}
+          onScreenshot={screenshot}
+          statusLine={settings.statusLine}
+          onStatusLine={(statusLine) => update({ statusLine })}
+          scaleFit={settings.scaleFit}
+          onScaleFit={(scaleFit) => update({ scaleFit })}
+          onPhoneAccess={() => setPhoneOpen(true)}
+          saveControls={<LayoutControls ws={ws} />}
         />
-      </main>
-      {settings.watchlistOpen && (
-        <Watchlist
-          catalog={catalog}
-          symbols={settings.watchlist}
-          active={chart.symbol}
-          quotes={quotes}
-          onSelect={(symbol) => updateChart(active, { symbol })}
-          onRemove={(id) => update({ watchlist: settings.watchlist.filter((s) => s !== id) })}
-          onAdd={() => setSearch({ initial: '', mode: 'watchlist' })}
+        <LeftToolbar
+          cursor={settings.cursor}
+          onCursor={(cursor) => update({ cursor })}
+          tool={tool}
+          onTool={setTool}
+          prefs={settings.drawingPrefs}
+          onPrefs={(drawingPrefs) => update({ drawingPrefs })}
+          ticker={product.ticker}
+          count={settings.drawings[product.id]?.length ?? 0}
+          total={Object.values(settings.drawings).reduce((n, list) => n + list.length, 0)}
+          onRemoveAll={(all) => (all ? setDrawings(() => ({})) : changeSymbolDrawings(product.id, []))}
         />
-      )}
-      <RightToolbar
-        watchlistOpen={settings.watchlistOpen}
-        onWatchlist={() => update({ watchlistOpen: !settings.watchlistOpen })}
-      />
-      {saveProblem && <div className="save-toast">{saveProblem}</div>}
-      {search && (
-        <SymbolSearch
-          catalog={catalog}
-          title={search.mode === 'watchlist' ? 'Add symbol' : search.mode === 'window' ? 'Symbol for the window' : 'Symbol Search'}
-          initial={search.initial}
-          onPick={pickSymbol}
-          onClose={() => setSearch(null)}
+        <main className="center">
+          {selected && !settings.drawingPrefs.hidden && (
+            <DrawingToolbar
+              drawing={selected}
+              fresh={!!selection?.fresh}
+              onChange={patchSelected}
+              onRemove={() => {
+                if (!selection) return
+                changeSymbolDrawings(selection.symbol, (settings.drawings[selection.symbol] ?? []).filter((d) => d.id !== selection.id))
+              }}
+            />
+          )}
+          <LayoutGrid
+            layout={layout}
+            sizes={sizesFor(layout, settings.splits[layout.id])}
+            onSizes={(sizes) => update((s) => ({ splits: { ...s.splits, [layout.id]: sizes } }))}
+          >
+            {layout.cells.map((cell, i) => (
+              <div
+                key={i}
+                className="layout-cell"
+                style={{ gridArea: cell.join(' / ') }}
+                onPointerEnter={() => (hovered.current = i)}
+                onPointerMoveCapture={() => (hovered.current = i)}
+                onWheelCapture={() => (hovered.current = i)}
+                onPointerLeave={() => hovered.current === i && (hovered.current = null)}
+              >
+                <ChartPanel
+                  ref={(h) => {
+                    panels.current[i] = h
+                  }}
+                  index={i}
+                  state={charts[i]}
+                  catalog={catalog}
+                  cursor={settings.cursor}
+                  statusLine={settings.statusLine}
+                  scaleFit={settings.scaleFit}
+                  active={i === active}
+                  outline={count > 1}
+                  onActivate={(index) => index !== settings.active && update({ active: index })}
+                  onEngine={onEngine}
+                  onAutoScale={onAutoScale}
+                  onPaneSizes={onPaneSizes}
+                  onCollapseLegend={(legendCollapsed) => updateChart(i, { legendCollapsed })}
+                  onCenterPrice={(centerPrice) => updateChart(i, { centerPrice })}
+                  onToggle={(id) =>
+                    setIndicators(i, (list) => list.map((x) => (x.id === id ? { ...x, hidden: !x.hidden } : x)))
+                  }
+                  onSettings={(id) => setEditing({ chart: i, id })}
+                  onRemove={(id) => setIndicators(i, (list) => list.filter((x) => x.id !== id))}
+                  onFloat={(id) =>
+                    setIndicators(i, (list) =>
+                      list.map((x) => (x.id === id ? { ...x, floating: { ...x.floating, open: !x.floating?.open } } : x)),
+                    )
+                  }
+                  onFloating={(id, patch) => setFloating(i, id, patch)}
+                  favorites={settings.favorites}
+                  windowActions={windowActions(i)}
+                />
+              </div>
+            ))}
+          </LayoutGrid>
+          <BottomBar
+            priceMode={chart.priceMode}
+            autoScale={autoScales[active] ?? true}
+            centerPrice={!!chart.centerPrice}
+            onRange={pickRange}
+            onPriceMode={(priceMode) => updateChart(active, { priceMode })}
+            onAutoScale={(on) => activeEngine()?.setAutoScale(on)}
+            onCenterPrice={(centerPrice) => updateChart(active, { centerPrice })}
+          />
+        </main>
+        {settings.watchlistOpen && (
+          <Watchlist
+            catalog={catalog}
+            symbols={settings.watchlist}
+            active={chart.symbol}
+            quotes={quotes}
+            onSelect={(symbol) => updateChart(active, { symbol })}
+            onRemove={(id) => update({ watchlist: settings.watchlist.filter((s) => s !== id) })}
+            onAdd={() => setSearch({ initial: '', mode: 'watchlist' })}
+          />
+        )}
+        <RightToolbar
+          watchlistOpen={settings.watchlistOpen}
+          onWatchlist={() => update({ watchlistOpen: !settings.watchlistOpen })}
         />
-      )}
-      {intervalText !== null && (
-        <IntervalDialog
-          initial={intervalText}
-          onPick={(id) => {
-            updateChart(active, { interval: id })
-            setIntervalText(null)
-          }}
-          onClose={() => setIntervalText(null)}
-        />
-      )}
-      {indicatorsFor && (!indicatorsFor.window || indicatorsWindow) && (
-        <IndicatorsDialog
-          title={
-            indicatorsWindow
-              ? `Indicators · ${getProduct(catalog, indicatorsWindow.symbol ?? charts[indicatorsFor.chart].symbol).ticker} ${intervalName(indicatorsWindow.interval)} window`
-              : undefined
-          }
-          onAdd={(type) => setTargetIndicators(indicatorsFor, (list) => [...list, createInstance(type)])}
-          onClose={() => setIndicatorsFor(null)}
-        />
-      )}
-      {editing && editingInst && (
-        <IndicatorSettings
-          inst={editingInst}
-          onChange={(inst) => setTargetIndicators(editing, (list) => list.map((x) => (x.id === inst.id ? inst : x)))}
-          onClose={() => setEditing(null)}
-        />
-      )}
-      {phoneOpen && <PhoneAccessDialog onClose={() => setPhoneOpen(false)} />}
-    </div>
+        {saveProblem && <div className="save-toast">{saveProblem}</div>}
+        {search && (
+          <SymbolSearch
+            catalog={catalog}
+            title={search.mode === 'watchlist' ? 'Add symbol' : search.mode === 'window' ? 'Symbol for the window' : 'Symbol Search'}
+            initial={search.initial}
+            onPick={pickSymbol}
+            onClose={() => setSearch(null)}
+          />
+        )}
+        {intervalText !== null && (
+          <IntervalDialog
+            initial={intervalText}
+            onPick={(id) => {
+              updateChart(active, { interval: id })
+              setIntervalText(null)
+            }}
+            onClose={() => setIntervalText(null)}
+          />
+        )}
+        {indicatorsFor && (!indicatorsFor.window || indicatorsWindow) && (
+          <IndicatorsDialog
+            title={
+              indicatorsWindow
+                ? `Indicators · ${getProduct(catalog, indicatorsWindow.symbol ?? charts[indicatorsFor.chart].symbol).ticker} ${intervalName(indicatorsWindow.interval)} window`
+                : undefined
+            }
+            onAdd={(type) => setTargetIndicators(indicatorsFor, (list) => [...list, createInstance(type)])}
+            onClose={() => setIndicatorsFor(null)}
+          />
+        )}
+        {editing && editingInst && (
+          <IndicatorSettings
+            inst={editingInst}
+            onChange={(inst) => setTargetIndicators(editing, (list) => list.map((x) => (x.id === inst.id ? inst : x)))}
+            onClose={() => setEditing(null)}
+          />
+        )}
+        {phoneOpen && <PhoneAccessDialog onClose={() => setPhoneOpen(false)} />}
+      </div>
+    </DrawingsContext.Provider>
   )
 }

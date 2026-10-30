@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { ChartEngine, type CursorMode, type LegendState, type PaneRect } from '../chart/ChartEngine'
 import { parseInterval } from '../data/intervals'
 import { watchKalshi } from '../data/kalshi'
+import { useDrawings } from '../drawings/context'
 import { describe, getProduct, type Catalog } from '../data/products'
 import { INDICATOR_BY_TYPE, instanceTitle } from '../indicators/catalog'
 import type { FloatingState } from '../indicators/types'
@@ -90,6 +91,7 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
   }, [engine, usesKalshi, product.id])
   useEffect(() => engine?.setPaneSizes(state.paneSizes), [engine, state.paneSizes])
   useEffect(() => engine?.setIndicators(state.indicators), [engine, state.indicators])
+  useDrawings(engine, product.id)
 
   // Coinbase granularities the indicators read besides the chart's own bars.
   const feedGranularities = useMemo(() => feedGranularitiesFor(state.indicators, interval), [state.indicators, interval])

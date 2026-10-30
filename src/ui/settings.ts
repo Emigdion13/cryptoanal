@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import type { ChartType, CursorMode, PriceMode } from '../chart/ChartEngine'
 import { createInstance } from '../indicators/catalog'
 import type { IndicatorInstance } from '../indicators/types'
+import { DRAWING_PREFS_DEFAULTS, type DrawingPrefs, type UserDrawing } from '../drawings/types'
 import { getInitialSettings, getInitialV1, queueSettings } from '../data/workspace'
 import type { SplitSizes } from './LayoutGrid'
 
@@ -95,6 +96,9 @@ export interface Settings {
   autosave: boolean
   statusLine: StatusLine
   scaleFit: ScaleFit
+  /** The drawings on each symbol, shown on every chart of it at every interval. */
+  drawings: Record<string, UserDrawing[]>
+  drawingPrefs: DrawingPrefs
 }
 
 export function newChart(from?: Partial<ChartState>): ChartState {
@@ -123,6 +127,8 @@ export function defaults(): Settings {
     autosave: true,
     statusLine: STATUS_LINE_DEFAULTS,
     scaleFit: SCALE_FIT_DEFAULTS,
+    drawings: {},
+    drawingPrefs: DRAWING_PREFS_DEFAULTS,
   }
 }
 
@@ -136,6 +142,7 @@ function load(): Settings {
       sync: { ...base.sync, ...saved.sync },
       statusLine: { ...base.statusLine, ...saved.statusLine },
       scaleFit: { ...base.scaleFit, ...saved.scaleFit },
+      drawingPrefs: { ...base.drawingPrefs, ...saved.drawingPrefs },
       charts: saved.charts?.length ? saved.charts : base.charts,
     }
   // The single-chart settings of the first version.

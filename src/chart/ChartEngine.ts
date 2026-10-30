@@ -26,6 +26,8 @@ import { formatCountdown, formatCrosshairTime, formatPrice, formatVolume } from 
 import { defaultInputs, INDICATOR_BY_TYPE } from '../indicators/catalog'
 import type { ComputeContext, IndicatorDef, IndicatorInstance, Output } from '../indicators/types'
 import { DrawingPrimitive } from './DrawingPrimitive'
+import { DrawingLayer } from '../drawings/layer'
+import type { DrawingPrefs, UserDrawing } from '../drawings/types'
 import { theme } from '../theme'
 import { FillPrimitive, type Fill } from './FillPrimitive'
 import { heikinAshi, nextHeikinAshi } from './heikinAshi'
@@ -82,6 +84,11 @@ interface Events {
   timeRange: { time: number }
   /** The user dragged a pane separator: relative heights by 'main' / indicator id. */
   paneSizes: Record<string, number>
+  /** The user placed, moved or removed a drawing: the symbol's drawings now. */
+  drawings: UserDrawing[]
+  /** A drawing was placed (the tool is done, unless it stays), or Escape cancelled the tool. */
+  drawingToolDone: { cancelled: boolean }
+  drawingSelect: UserDrawing | null
 }
 
 /** A live indicator: its series, last output and what it was computed from. */
@@ -167,6 +174,7 @@ export class ChartEngine {
   private volumeKey = ''
   private raf = 0
   private cleanup: (() => void)[] = []
+  private drawingLayer: DrawingLayer
 
   private instances: IndicatorInstance[] = []
   private runtimes: Runtime[] = []
@@ -240,6 +248,21 @@ export class ChartEngine {
     })
     // Swapping the price series must never leave pane 0 empty, or the panes below would shift up.
     this.chart.panes()[0].setPreserveEmptyPane(true)
+    // Before bindPointer: a press on a drawing (or with a tool) must not pan the chart.
+    this.drawingLayer = new DrawingLayer(
+      {
+        chart: this.chart,
+        host,
+        bars: () => this.bars,
+        barSeconds: () => this.def?.seconds ?? 60,
+        fmt: (price) => formatPrice(price, this.precision),
+      },
+      {
+        change: (list) => this.emit('drawings', list),
+        toolDone: (cancelled) => this.emit('drawingToolDone', { cancelled }),
+        select: (d) => this.emit('drawingSelect', d),
+      },
+    )
     this.createMain()
 
     this.priceLabel = this.makeLabel()
@@ -263,6 +286,7 @@ export class ChartEngine {
   destroy() {
     cancelAnimationFrame(this.raf)
     for (const fn of this.cleanup) fn()
+    this.drawingLayer.destroy()
     this.chart.remove()
     this.priceLabel.remove()
     this.volumeLabel.remove()
@@ -662,6 +686,26 @@ export class ChartEngine {
     if (this.hoverIndex === null) this.emitLegend()
   }
 
+  // ── drawings ────────────────────────────────────────────────────────────
+
+  /** The symbol's drawings, shown at this chart's interval. */
+  setDrawings(list: UserDrawing[]) {
+    this.drawingLayer.setDrawings(list)
+  }
+
+  /** The tool the next clicks place, or null for the cursor (select and move drawings). */
+  setDrawingTool(id: string | null) {
+    this.drawingLayer.setTool(id)
+  }
+
+  setDrawingPrefs(prefs: DrawingPrefs) {
+    this.drawingLayer.setPrefs(prefs)
+  }
+
+  deselectDrawing() {
+    this.drawingLayer.deselect()
+  }
+
   // ── appearance ──────────────────────────────────────────────────────────
 
   setChartType(type: ChartType) {
@@ -1011,6 +1055,7 @@ export class ChartEngine {
           wickDownColor: down,
         })
     }
+    this.main.attachPrimitive(this.drawingLayer)
     this.labelKey = ''
     this.applyScaleFit()
   }
