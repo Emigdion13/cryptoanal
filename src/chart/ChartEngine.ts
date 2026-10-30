@@ -11,6 +11,7 @@ import {
   LineStyle,
   LineType,
   PriceScaleMode,
+  type AutoscaleInfo,
   type IChartApi,
   type ISeriesApi,
   type LogicalRange,
@@ -131,6 +132,7 @@ function opaqueOnBlack(color: string): string {
 export class ChartEngine {
   readonly chart: IChartApi
   private main: ISeriesApi<SeriesType> | null = null
+  private fit = { price: true, indicators: true }
   private type: ChartType = 'candles'
   private bars: Candle[] = []
   private ha: Candle[] = []
@@ -569,6 +571,7 @@ export class ChartEngine {
     // TradingView keeps most of the height for prices; each indicator pane gets a slice,
     // unless the layout remembers heights the user dragged.
     this.applyPaneSizes()
+    this.applyScaleFit()
   }
 
   private styleRuntime(rt: Runtime) {
@@ -669,6 +672,26 @@ export class ChartEngine {
     })
     // The custom label shows prices; in percent mode the engine's own label shows percents.
     this.main?.applyOptions({ lastValueVisible: mode === 'percent' })
+  }
+
+  /**
+   * What the price axis fits while it scales itself: the price series, the indicators drawn over
+   * it, or both. With neither, it fits the price. Turns Auto on, so the change shows at once.
+   */
+  setScaleFit(fit: { price: boolean; indicators: boolean }) {
+    if (fit.price === this.fit.price && fit.indicators === this.fit.indicators) return
+    this.fit = { ...fit }
+    this.applyScaleFit()
+    this.setAutoScale(true)
+  }
+
+  private applyScaleFit() {
+    const price = this.fit.price || !this.fit.indicators
+    this.main?.applyOptions({ autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => (price ? original() : null) })
+    for (const rt of this.runtimes)
+      if (rt.pane === 0 && !rt.def.ownScale)
+        for (const s of rt.series.values())
+          s.applyOptions({ autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => (this.fit.indicators ? original() : null) })
   }
 
   setAutoScale(on: boolean) {
@@ -911,6 +934,7 @@ export class ChartEngine {
         })
     }
     this.labelKey = ''
+    this.applyScaleFit()
   }
 
   private source(): Candle[] {

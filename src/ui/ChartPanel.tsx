@@ -11,7 +11,7 @@ import { canFloat } from './floatingModel'
 import { feedGranularitiesFor, useChartData } from '../useChartData'
 import { RealtimeIcon } from './icons'
 import { IndicatorRow, MainLegend, type IndicatorActions } from './Legend'
-import type { ChartState, StatusLine } from './settings'
+import type { ChartState, ScaleFit, StatusLine } from './settings'
 
 export interface PanelHandle {
   showRange: (from: number, interval: string) => void
@@ -23,6 +23,7 @@ interface Props extends IndicatorActions {
   catalog: Catalog
   cursor: CursorMode
   statusLine: StatusLine
+  scaleFit: ScaleFit
   active: boolean
   /** Outline the active chart (only when there is more than one). */
   outline: boolean
@@ -73,6 +74,7 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
   useEffect(() => engine?.setChartType(state.chartType), [engine, state.chartType])
   useEffect(() => engine?.setPriceMode(state.priceMode), [engine, state.priceMode])
   useEffect(() => engine?.setCursor(cursor), [engine, cursor])
+  useEffect(() => engine?.setScaleFit(props.scaleFit), [engine, props.scaleFit])
   useEffect(() => engine?.setProduct(product.id), [engine, product.id])
   // Kalshi's strike is polled only while this chart shows the Kalshi Strike indicator.
   const usesKalshi = state.indicators.some((i) => i.type === 'kalshiStrike' && !i.hidden)
@@ -168,6 +170,7 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
             chartType={state.chartType}
             cursor={cursor}
             statusLine={props.statusLine}
+            scaleFit={props.scaleFit}
             favorites={props.favorites}
             dockIndex={dockedWindows.indexOf(win)}
             front={win.id === frontWindow}

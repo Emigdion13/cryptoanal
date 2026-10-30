@@ -338,6 +338,8 @@ export function App() {
         onScreenshot={screenshot}
         statusLine={settings.statusLine}
         onStatusLine={(statusLine) => update({ statusLine })}
+        scaleFit={settings.scaleFit}
+        onScaleFit={(scaleFit) => update({ scaleFit })}
         onPhoneAccess={() => setPhoneOpen(true)}
         saveControls={<LayoutControls ws={ws} />}
       />
@@ -367,6 +369,7 @@ export function App() {
                 catalog={catalog}
                 cursor={settings.cursor}
                 statusLine={settings.statusLine}
+                scaleFit={settings.scaleFit}
                 active={i === active}
                 outline={count > 1}
                 onActivate={(index) => index !== settings.active && update({ active: index })}

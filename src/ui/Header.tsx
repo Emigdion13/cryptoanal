@@ -4,7 +4,7 @@ import { INTERVAL_MENU, parseInterval, type IntervalGroup } from '../data/interv
 import type { Product } from '../data/types'
 import { useDismiss } from './common'
 import { LayoutMenu } from './LayoutMenu'
-import { STATUS_LINE_DEFAULTS, type StatusLine, type SyncOptions } from './settings'
+import { STATUS_LINE_DEFAULTS, type ScaleFit, type StatusLine, type SyncOptions } from './settings'
 import {
   CameraIcon,
   CHART_TYPE_ICONS,
@@ -49,6 +49,9 @@ interface Props {
   onScreenshot: () => void
   statusLine: StatusLine
   onStatusLine: (statusLine: StatusLine) => void
+  /** ⚙ → Scale: what the price axis keeps in view. */
+  scaleFit: ScaleFit
+  onScaleFit: (scaleFit: ScaleFit) => void
   /** ⚙ → Phone access: the iPhone page's passcode and switch. */
   onPhoneAccess: () => void
   onIndicators: () => void
@@ -123,7 +126,13 @@ export function Header(props: Props) {
       <div className="sep" />
       {props.saveControls}
       <div className="sep" />
-      <StatusLineMenu value={props.statusLine} onChange={props.onStatusLine} onPhoneAccess={props.onPhoneAccess} />
+      <StatusLineMenu
+        value={props.statusLine}
+        onChange={props.onStatusLine}
+        scaleFit={props.scaleFit}
+        onScaleFit={props.onScaleFit}
+        onPhoneAccess={props.onPhoneAccess}
+      />
       <button className="tb-btn icon" onClick={props.onFullscreen} title="Fullscreen mode">
         <FullscreenIcon />
       </button>
@@ -328,13 +337,22 @@ const STATUS_ROWS: { key: keyof StatusLine; label: string }[] = [
  * logo and name, its OHLC and change, the indicators' titles, arguments and values. For every
  * chart of the layout.
  */
+const SCALE_ROWS: { key: keyof ScaleFit; label: string; title: string }[] = [
+  { key: 'price', label: 'Keep price in view', title: 'The price axis always fits the candles' },
+  { key: 'indicators', label: 'Keep indicators in view', title: 'The price axis also fits the indicators drawn over the price' },
+]
+
 function StatusLineMenu({
   value,
   onChange,
+  scaleFit,
+  onScaleFit,
   onPhoneAccess,
 }: {
   value: StatusLine
   onChange: (v: StatusLine) => void
+  scaleFit: ScaleFit
+  onScaleFit: (v: ScaleFit) => void
   onPhoneAccess: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -367,6 +385,18 @@ function StatusLineMenu({
               <span className="menu-label">Reset to defaults</span>
             </div>
           )}
+          <div className="menu-section static">SCALE</div>
+          {SCALE_ROWS.map(({ key, label, title }) => (
+            <label key={key} className="menu-item switch-item" title={title}>
+              <span className="menu-label">{label}</span>
+              <input
+                type="checkbox"
+                className="switch"
+                checked={scaleFit[key]}
+                onChange={(e) => onScaleFit({ ...scaleFit, [key]: e.target.checked })}
+              />
+            </label>
+          ))}
           <div className="menu-section static">PHONE</div>
           <div
             className="menu-item"

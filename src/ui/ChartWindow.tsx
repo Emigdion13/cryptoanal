@@ -11,7 +11,7 @@ import { RESIZE_EDGES, resizeRect, type Rect, type ResizeEdge } from './chartWin
 import { CoinLogo, useDismiss } from './common'
 import { ChevronDown, CloseIcon, FxIcon, RealtimeIcon } from './icons'
 import { IndicatorRow, MainLegend } from './Legend'
-import type { ChartWindowState, StatusLine } from './settings'
+import type { ChartWindowState, ScaleFit, StatusLine } from './settings'
 
 /** How close to the chart's edge a window may sit. */
 const EDGE = 4
@@ -42,6 +42,7 @@ interface Props {
   chartType: ChartType
   cursor: CursorMode
   statusLine: StatusLine
+  scaleFit: ScaleFit
   /** The toolbar's favorite intervals: one click away in the header. */
   favorites: string[]
   dockIndex: number
@@ -59,7 +60,7 @@ interface Props {
  * with the layout.
  */
 export function ChartWindow(props: Props) {
-  const { win, product, parentSymbol, parentEngine, catalog, chartType, cursor, statusLine, favorites, dockIndex, actions } = props
+  const { win, product, parentSymbol, parentEngine, catalog, chartType, cursor, statusLine, scaleFit, favorites, dockIndex, actions } = props
   const boxRef = useRef<HTMLElement>(null)
   const [chart, setChart] = useState({ w: 0, h: 0 })
   const [live, setLive] = useState<Rect | null>(null)
@@ -224,6 +225,7 @@ export function ChartWindow(props: Props) {
             chartType={chartType}
             cursor={cursor}
             statusLine={statusLine}
+            scaleFit={scaleFit}
             interval={interval}
             actions={actions}
           />
@@ -246,6 +248,7 @@ function WindowChart({
   chartType,
   cursor,
   statusLine,
+  scaleFit,
   interval,
   actions,
 }: Omit<Props, 'favorites' | 'dockIndex' | 'front' | 'onFront'> & { interval: ReturnType<typeof parseInterval> }) {
@@ -276,6 +279,7 @@ function WindowChart({
 
   useEffect(() => engine?.setChartType(chartType), [engine, chartType])
   useEffect(() => engine?.setCursor(cursor), [engine, cursor])
+  useEffect(() => engine?.setScaleFit(scaleFit), [engine, scaleFit])
   useEffect(() => engine?.setProduct(product.id), [engine, product.id])
   useEffect(() => engine?.setPaneSizes(win.paneSizes), [engine, win.paneSizes])
   useEffect(() => engine?.setIndicators(win.indicators), [engine, win.indicators])

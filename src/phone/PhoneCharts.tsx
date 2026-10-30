@@ -9,7 +9,7 @@ import { useChartData } from '../useChartData'
 import { CoinLogo } from '../ui/common'
 import { IndicatorRow, MainLegend } from '../ui/Legend'
 import { LAYOUT_BY_ID } from '../ui/layouts'
-import { defaults, STATUS_LINE_DEFAULTS, type ChartState, type Settings } from '../ui/settings'
+import { defaults, SCALE_FIT_DEFAULTS, STATUS_LINE_DEFAULTS, type ChartState, type Settings } from '../ui/settings'
 import { phoneFetch, PhoneRequestError } from './auth'
 
 /** How often the phone rereads the desktop's workspace, to follow its symbol, interval and indicators. */
@@ -24,6 +24,7 @@ interface Desktop {
   charts: ChartState[]
   active: number
   statusLine: Settings['statusLine']
+  scaleFit: Settings['scaleFit']
 }
 
 /** The desktop's settings as the workspace file has them, filled in as the desktop's own load does. */
@@ -36,6 +37,7 @@ function readDesktop(settings: Partial<Settings> | null): Desktop {
     charts,
     active: Math.min(Math.max(0, settings?.active ?? 0), charts.length - 1),
     statusLine: { ...STATUS_LINE_DEFAULTS, ...settings?.statusLine },
+    scaleFit: { ...SCALE_FIT_DEFAULTS, ...settings?.scaleFit },
   }
 }
 
@@ -112,7 +114,7 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
       )}
       {problem && <div className="phone-problem">{problem}</div>}
       {chart && desktop ? (
-        <ChartStack chart={chart} statusLine={desktop.statusLine} />
+        <ChartStack chart={chart} statusLine={desktop.statusLine} scaleFit={desktop.scaleFit} />
       ) : (
         !problem && <div className="phone-wait">Reading the desktop's chart…</div>
       )}
@@ -136,7 +138,7 @@ function ChartTitle({ chart }: { chart: ChartState }) {
   )
 }
 
-function ChartStack({ chart, statusLine }: { chart: ChartState; statusLine: Desktop['statusLine'] }) {
+function ChartStack({ chart, statusLine, scaleFit }: { chart: ChartState; statusLine: Desktop['statusLine']; scaleFit: Desktop['scaleFit'] }) {
   const catalog = useCatalog()
   const product = getProduct(catalog, chart.symbol)
   const interval = parseInterval(chart.interval)
@@ -174,6 +176,7 @@ function ChartStack({ chart, statusLine }: { chart: ChartState; statusLine: Desk
 
   useEffect(() => engine?.setChartType(chart.chartType), [engine, chart.chartType])
   useEffect(() => engine?.setPriceMode(chart.priceMode), [engine, chart.priceMode])
+  useEffect(() => engine?.setScaleFit(scaleFit), [engine, scaleFit])
   useEffect(() => engine?.setProduct(product.id), [engine, product.id])
   useEffect(() => engine?.setPaneSizes(sizes), [engine, sizes])
   useEffect(() => engine?.setIndicators(indicators), [engine, indicators])

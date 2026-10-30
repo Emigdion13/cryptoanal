@@ -48,6 +48,14 @@ export interface StatusLine {
   indicatorValues: boolean
 }
 
+/** What the price axis fits while it scales itself (Auto): the price, the indicators drawn over it, or both. */
+export interface ScaleFit {
+  price: boolean
+  indicators: boolean
+}
+
+export const SCALE_FIT_DEFAULTS: ScaleFit = { price: true, indicators: true }
+
 export const STATUS_LINE_DEFAULTS: StatusLine = {
   logo: true,
   title: true,
@@ -84,6 +92,7 @@ export interface Settings {
   /** Save the current layout as it changes, as TradingView's Autosave does. */
   autosave: boolean
   statusLine: StatusLine
+  scaleFit: ScaleFit
 }
 
 export function newChart(from?: Partial<ChartState>): ChartState {
@@ -111,6 +120,7 @@ export function defaults(): Settings {
     currentLayoutId: null,
     autosave: true,
     statusLine: STATUS_LINE_DEFAULTS,
+    scaleFit: SCALE_FIT_DEFAULTS,
   }
 }
 
@@ -123,6 +133,7 @@ function load(): Settings {
       ...saved,
       sync: { ...base.sync, ...saved.sync },
       statusLine: { ...base.statusLine, ...saved.statusLine },
+      scaleFit: { ...base.scaleFit, ...saved.scaleFit },
       charts: saved.charts?.length ? saved.charts : base.charts,
     }
   // The single-chart settings of the first version.
