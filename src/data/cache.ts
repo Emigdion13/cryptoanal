@@ -1,4 +1,5 @@
-import { fetchCandles, PAGE } from './coinbase'
+import { fetchCandles, fetchTrades, PAGE, type Trade } from './coinbase'
+import { TRADE_GRANULARITY } from './intervals'
 import type { Candle } from './types'
 
 /**
@@ -12,7 +13,7 @@ export class CandleCache {
   private older: Promise<number> | null = null
   private lastPageWasEmpty = false
   /** The newest trade folded in: every chart on this product and granularity hands it the same trades. */
-  private lastTradeId = 0
+  protected lastTradeId = 0
 
   constructor(
     readonly product: string,
@@ -56,15 +57,16 @@ export class CandleCache {
     }
   }
 
-  /** Pages back until at least `count` candles are loaded. */
-  async ensureCount(count: number): Promise<void> {
+  /** Pages back until at least `count` candles are loaded; `progress` runs after each batch. */
+  async ensureCount(count: number, progress?: () => void): Promise<void> {
     while (!this.exhausted && this.candles.length < count) {
       const missing = Math.ceil((count - this.candles.length) / PAGE)
       if (!(await this.loadOlder(Math.min(4, missing))) && !this.exhausted) break
+      progress?.()
     }
   }
 
-  private async fetchOlder(pages: number): Promise<number> {
+  protected async fetchOlder(pages: number): Promise<number> {
     const g = this.granularity
     const before = this.oldest ?? Math.floor(Date.now() / 1000 / g) * g + g
     const ends = Array.from({ length: pages }, (_, i) => before - g - i * PAGE * g)
@@ -122,11 +124,122 @@ export class CandleCache {
   }
 }
 
+/** Trade pages read at most to fill a seconds chart when it opens; scrolling back reads more. */
+const TRADE_PAGES_INITIAL = 30
+
+/**
+ * One-second candles built from Coinbase's trades, which have no candles under a minute. Trades
+ * page back by id, one page at a time, so history comes slower than candles do.
+ */
+export class TradeCache extends CandleCache {
+  /** The oldest trade read: the cursor for the next older page. */
+  private oldestTradeId = 0
+  /** Live trades that came before the first page: folded in once it lands. */
+  private early: Trade[] = []
+
+  constructor(product: string) {
+    super(product, TRADE_GRANULARITY)
+  }
+
+  async loadLatest(): Promise<void> {
+    const trades = await fetchTrades(this.product)
+    if (!trades.length) return
+    const oldest = trades[trades.length - 1].id
+    // Nothing yet, or away for more than a page: start over rather than keep a hole.
+    if (!this.candles.length || oldest > this.lastTradeId + 1) {
+      this.candles = secondCandles(trades)
+      this.oldestTradeId = oldest
+      this.lastTradeId = trades[0].id
+      this.exhausted = false
+      for (const t of this.early) super.applyTrade(t.price, t.size, t.time, t.id)
+      this.early = []
+      return
+    }
+    for (let k = trades.length - 1; k >= 0; k--) {
+      const t = trades[k]
+      if (t.id > this.lastTradeId) super.applyTrade(t.price, t.size, t.time, t.id)
+    }
+  }
+
+  async ensureFrom(time: number, maxPages = 60): Promise<void> {
+    for (let pages = 0; !this.exhausted && pages < maxPages && (this.oldest ?? Infinity) > time; pages++)
+      await this.loadOlder(1)
+  }
+
+  /** `count` one-second candles means that many seconds back from the newest. */
+  async ensureCount(count: number, progress?: () => void): Promise<void> {
+    for (let pages = 0; !this.exhausted && pages < TRADE_PAGES_INITIAL; pages++) {
+      const newest = this.candles[this.candles.length - 1]?.time
+      if (newest !== undefined && (this.oldest ?? Infinity) <= newest - count) break
+      await this.loadOlder(1)
+      progress?.()
+    }
+  }
+
+  applyTrade(price: number, size: number, time: number, id?: number): boolean {
+    if (!this.candles.length && id !== undefined && this.early.length < 5000) this.early.push({ id, time, price, size })
+    return super.applyTrade(price, size, time, id)
+  }
+
+  /** Resolves with how many trades were read: a busy second can take a page without adding a candle. */
+  protected async fetchOlder(pages: number): Promise<number> {
+    let read = 0
+    for (let p = 0; p < pages && !this.exhausted; p++) {
+      if (!this.oldestTradeId) {
+        await this.loadLatest()
+        read += this.candles.length
+        continue
+      }
+      const trades = await fetchTrades(this.product, this.oldestTradeId)
+      if (!trades.length) {
+        this.exhausted = true
+        break
+      }
+      this.oldestTradeId = trades[trades.length - 1].id
+      this.prepend(secondCandles(trades))
+      read += trades.length
+    }
+    return read
+  }
+
+  /** Older candles go in front; one may share its second with the current oldest. */
+  private prepend(older: Candle[]) {
+    const first = this.candles[0]
+    const last = older[older.length - 1]
+    if (first && last && last.time === first.time) {
+      first.open = last.open
+      if (last.high > first.high) first.high = last.high
+      if (last.low < first.low) first.low = last.low
+      first.volume += last.volume
+      older.pop()
+    }
+    this.candles = older.concat(this.candles)
+  }
+}
+
+/** Trades (newest first) as one-second candles, oldest first. */
+export function secondCandles(trades: readonly Trade[]): Candle[] {
+  const out: Candle[] = []
+  for (let k = trades.length - 1; k >= 0; k--) {
+    const { price, size } = trades[k]
+    const time = Math.floor(trades[k].time)
+    const last = out[out.length - 1]
+    if (last && last.time === time) {
+      if (price > last.high) last.high = price
+      if (price < last.low) last.low = price
+      last.close = price
+      last.volume += size
+    } else out.push({ time, open: price, high: price, low: price, close: price, volume: size })
+  }
+  return out
+}
+
 const caches = new Map<string, CandleCache>()
 
 export function getCache(product: string, granularity: number): CandleCache {
   const key = `${product}|${granularity}`
   let cache = caches.get(key)
-  if (!cache) caches.set(key, (cache = new CandleCache(product, granularity)))
+  if (!cache)
+    caches.set(key, (cache = granularity === TRADE_GRANULARITY ? new TradeCache(product) : new CandleCache(product, granularity)))
   return cache
 }

@@ -2,14 +2,16 @@ import type { Candle } from './types'
 
 /** Coinbase serves candles at these sizes only; every other interval is built from one of them. */
 export const GRANULARITIES = [60, 300, 900, 3600, 21600, 86400] as const
-export type Granularity = (typeof GRANULARITIES)[number]
+/** Seconds intervals have no Coinbase candles: they are built from trades, one candle a second. */
+export const TRADE_GRANULARITY = 1
+export type Granularity = (typeof GRANULARITIES)[number] | typeof TRADE_GRANULARITY
 
-export type IntervalGroup = 'minutes' | 'hours' | 'days'
+export type IntervalGroup = 'seconds' | 'minutes' | 'hours' | 'days'
 
 export interface IntervalDef {
-  /** TradingView-style id: minutes as a number ('1', '240'), or '1D', '1W', '1M'. */
+  /** TradingView-style id: minutes as a number ('1', '240'), or '5S', '1D', '1W', '1M'. */
   id: string
-  /** Short label for the toolbar: 1m, 4h, D, W, M. */
+  /** Short label for the toolbar: 5s, 1m, 4h, D, W, M. */
   label: string
   /** Long name for menus: "4 hours". */
   name: string
@@ -31,8 +33,8 @@ function plural(n: number, unit: string) {
 }
 
 /**
- * Reads what a user types or stores: '5', '60', '4h', '240', 'D', '1D', 'W', 'M'.
- * Minute intervals must split a day evenly so bars line up with UTC midnight, as on TradingView.
+ * Reads what a user types or stores: '5S', '5', '60', '4h', '240', 'D', '1D', 'W', 'M'.
+ * Second and minute intervals must split a day evenly so bars line up with UTC midnight, as on TradingView.
  */
 export function parseInterval(input: string): IntervalDef | null {
   const text = input.trim()
@@ -51,9 +53,23 @@ export function parseInterval(input: string): IntervalDef | null {
     case 'h':
       return minutes(count * 60)
     case 's':
-      return null
+      return seconds(count)
     default:
       return minutes(count)
+  }
+}
+
+function seconds(n: number): IntervalDef | null {
+  if (n % 60 === 0) return minutes(n / 60)
+  if (n > 60 || DAY % n !== 0) return null
+  return {
+    id: `${n}S`,
+    label: `${n}s`,
+    name: plural(n, 'second'),
+    group: 'seconds',
+    kind: 'fixed',
+    seconds: n,
+    intraday: true,
   }
 }
 
@@ -102,17 +118,15 @@ const MONTH: IntervalDef = {
 
 /** The interval menu, in TradingView's order. */
 export const INTERVAL_MENU: IntervalDef[] = [
+  '1S', '5S', '10S', '15S', '30S', '45S',
   '1', '2', '3', '5', '10', '15', '30', '45',
   '60', '120', '180', '240', '360', '720',
   '1D', '1W', '1M',
 ].map((id) => parseInterval(id)!)
 
-/** The biggest Coinbase candle size that splits this interval evenly. */
+/** The biggest Coinbase candle size that splits this interval evenly (trades for seconds intervals). */
 export function baseGranularity(def: IntervalDef): Granularity {
-  if (def.kind !== 'fixed') return 86400
-  let best: Granularity = 60
-  for (const g of GRANULARITIES) if (g <= def.seconds && def.seconds % g === 0) best = g
-  return best
+  return def.kind === 'fixed' ? granularityFor(def.seconds) : 86400
 }
 
 /** Start of the bar that holds `time` (seconds, UTC). */
@@ -140,6 +154,7 @@ function merge(into: Candle, c: Candle) {
 
 /** The biggest Coinbase candle size that splits `seconds` evenly (weeks and days use the daily). */
 export function granularityFor(seconds: number): Granularity {
+  if (seconds % 60 !== 0) return TRADE_GRANULARITY
   let best: Granularity = 60
   for (const g of GRANULARITIES) if (g <= seconds && seconds % g === 0) best = g
   return best

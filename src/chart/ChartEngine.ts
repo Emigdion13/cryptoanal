@@ -217,7 +217,8 @@ export class ChartEngine {
       handleScroll: { vertTouchDrag: false },
       localization: {
         locale: 'en-US',
-        timeFormatter: (t: Time) => formatCrosshairTime(t as number, this.def?.intraday ?? true),
+        timeFormatter: (t: Time) =>
+          formatCrosshairTime(t as number, this.def?.intraday ?? true, (this.def?.seconds ?? 60) < 60),
       },
     })
     // Swapping the price series must never leave pane 0 empty, or the panes below would shift up.
@@ -264,7 +265,7 @@ export class ChartEngine {
 
   setInterval(def: IntervalDef) {
     this.def = def
-    this.chart.applyOptions({ timeScale: { timeVisible: def.intraday } })
+    this.chart.applyOptions({ timeScale: { timeVisible: def.intraday, secondsVisible: def.seconds < 60 } })
   }
 
   setPrecision(precision: number) {

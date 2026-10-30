@@ -22,6 +22,15 @@ describe('parseInterval', () => {
     expect(parseInterval('M')?.id).toBe('1M')
   })
 
+  it('reads seconds as TradingView spells them', () => {
+    expect(parseInterval('5S')).toMatchObject({ id: '5S', label: '5s', name: '5 seconds', group: 'seconds', seconds: 5 })
+    expect(parseInterval('45s')?.id).toBe('45S')
+    expect(parseInterval('60S')?.id).toBe('1')
+    expect(parseInterval('120s')?.id).toBe('2')
+    expect(parseInterval('7S')).toBeNull()
+    expect(parseInterval('90S')).toBeNull()
+  })
+
   it('refuses intervals that do not split a day', () => {
     expect(parseInterval('7')).toBeNull()
     expect(parseInterval('0')).toBeNull()
@@ -32,6 +41,7 @@ describe('parseInterval', () => {
 
 describe('baseGranularity', () => {
   it('uses the biggest Coinbase size that divides the interval', () => {
+    expect(baseGranularity(parseInterval('15S')!)).toBe(1)
     expect(baseGranularity(parseInterval('3')!)).toBe(60)
     expect(baseGranularity(parseInterval('10')!)).toBe(300)
     expect(baseGranularity(parseInterval('45')!)).toBe(900)

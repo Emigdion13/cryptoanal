@@ -81,9 +81,15 @@ export function useChartData(
     ;(async () => {
       try {
         await cache.loadLatest()
-        await cache.ensureCount(Math.min(MAX_INITIAL_PAGES * 300, Math.ceil(TARGET_BARS * ratio)))
         if (!alive) return
-        render(hadCache)
+        // Seconds charts page back through trades slowly: show each page as it lands.
+        let shown = false
+        await cache.ensureCount(Math.min(MAX_INITIAL_PAGES * 300, Math.ceil(TARGET_BARS * ratio)), () => {
+          render(hadCache || shown)
+          shown = true
+        })
+        if (!alive) return
+        render(hadCache || shown)
         ready = true
         setStatus('ready')
         await show()

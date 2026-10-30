@@ -44,6 +44,30 @@ export async function fetchCandles(
     .sort((a, b) => a.time - b.time)
 }
 
+/** Coinbase returns at most 1000 trades per request. */
+export const TRADE_PAGE = 1000
+
+export interface Trade {
+  /** Rising per product. */
+  id: number
+  /** Seconds since the epoch, with fractions. */
+  time: number
+  price: number
+  size: number
+}
+
+/** One page of trades, newest first: the newest of all, or those just before trade `olderThan`. */
+export async function fetchTrades(product: string, olderThan?: number): Promise<Trade[]> {
+  // Coinbase's `after` cursor pages back in time.
+  const cursor = olderThan === undefined ? '' : `&after=${olderThan}`
+  const rows = await getJson<{ trade_id: number; time: string; price: string; size: string }[]>(
+    `/products/${product}/trades?limit=${TRADE_PAGE}${cursor}`,
+  )
+  return rows
+    .map((r) => ({ id: r.trade_id, time: Date.parse(r.time) / 1000, price: Number(r.price), size: Number(r.size) }))
+    .sort((a, b) => b.id - a.id)
+}
+
 interface RawProduct {
   id: string
   base_currency: string

@@ -51,11 +51,13 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const pad = (n: number) => String(n).padStart(2, '0')
 
-/** Crosshair date label: "Mon 26 Oct '26" and, intraday, "  21:53". */
-export function formatCrosshairTime(sec: number, intraday: boolean): string {
+/** Crosshair date label: "Mon 26 Oct '26" and, intraday, "  21:53" (with ":07" on seconds charts). */
+export function formatCrosshairTime(sec: number, intraday: boolean, seconds = false): string {
   const d = new Date(sec * 1000)
   const date = `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} '${pad(d.getUTCFullYear() % 100)}`
-  return intraday ? `${date}   ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}` : date
+  if (!intraday) return date
+  const time = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+  return `${date}   ${seconds ? `${time}:${pad(d.getUTCSeconds())}` : time}`
 }
 
 /** Time left on the live bar: 02:07:02, 07:02, or 3d 4h for weeks and months. */

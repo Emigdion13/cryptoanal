@@ -34,7 +34,7 @@ export const CHART_TYPES: { type: ChartType; name: string }[] = [
   { type: 'columns', name: 'Columns' },
 ]
 
-const GROUP_NAMES: Record<IntervalGroup, string> = { minutes: 'Minutes', hours: 'Hours', days: 'Days' }
+const GROUP_NAMES: Record<IntervalGroup, string> = { seconds: 'Seconds', minutes: 'Minutes', hours: 'Hours', days: 'Days' }
 
 interface Props {
   product: Product
@@ -145,7 +145,7 @@ function IntervalMenu(props: {
   const ref = useRef<HTMLDivElement>(null)
   const close = useCallback(() => setOpen(false), [])
   useDismiss(ref, open, close)
-  const groups: IntervalGroup[] = ['minutes', 'hours', 'days']
+  const groups: IntervalGroup[] = ['seconds', 'minutes', 'hours', 'days']
 
   return (
     <div className="dropdown" ref={ref}>
