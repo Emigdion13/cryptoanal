@@ -18,17 +18,33 @@ import { onSaveProblem } from './data/workspace'
 import { LayoutControls } from './ui/LayoutControls'
 import { LayoutGrid, sizesFor } from './ui/LayoutGrid'
 import { LAYOUT_BY_ID, LAYOUTS } from './ui/layouts'
-import { newChart, useSettings, type ChartState } from './ui/settings'
+import { newChart, useSettings, type ChartState, type ChartWindowState } from './ui/settings'
+import type { ChartWindowActions } from './ui/ChartWindow'
+import { newChartWindow } from './ui/chartWindows'
+import { PhoneAccessDialog } from './ui/PhoneAccessDialog'
 import { LeftToolbar, RightToolbar } from './ui/Sidebars'
 import { SymbolSearch } from './ui/SymbolSearch'
 import { useWorkspace } from './ui/useWorkspace'
 import { Watchlist } from './ui/Watchlist'
 
-type SearchState = { initial: string; mode: 'symbol' | 'watchlist' }
+type SearchState = {
+  initial: string
+  mode: 'symbol' | 'watchlist' | 'window'
+  /** mode 'window': the chart window picking its own symbol. */
+  window?: { chart: number; id: string }
+}
+/** Where the Indicators dialog adds to, and which indicator's settings are open: a chart, or one of its windows. */
+type IndicatorTarget = { chart: number; window?: string }
 
 /** A copy of a chart's indicators with fresh ids, for a new chart in the layout. */
 function cloneIndicators(list: IndicatorInstance[]): IndicatorInstance[] {
   return list.map((i) => ({ ...createInstance(i.type), inputs: { ...i.inputs }, styles: { ...i.styles }, hidden: i.hidden }))
+}
+
+/** "5m", "4h", "1D". */
+function intervalName(id: string): string {
+  const iv = parseInterval(id)
+  return iv ? (iv.intraday ? iv.label : `1${iv.label}`) : id
 }
 
 export function App() {
@@ -55,8 +71,9 @@ export function App() {
   const [autoScales, setAutoScales] = useState<Record<number, boolean>>({})
   const [search, setSearch] = useState<SearchState | null>(null)
   const [intervalText, setIntervalText] = useState<string | null>(null)
-  const [indicatorsOpen, setIndicatorsOpen] = useState(false)
-  const [editing, setEditing] = useState<{ chart: number; id: string } | null>(null)
+  const [indicatorsFor, setIndicatorsFor] = useState<IndicatorTarget | null>(null)
+  const [phoneOpen, setPhoneOpen] = useState(false)
+  const [editing, setEditing] = useState<(IndicatorTarget & { id: string }) | null>(null)
 
   const onEngine = useCallback((index: number, engine: ChartEngine | null) => {
     if (engine) engines.current.set(index, engine)
@@ -109,6 +126,37 @@ export function App() {
       ),
     [setIndicators],
   )
+  /** Changes a chart's floating chart windows. */
+  const setWindows = useCallback(
+    (index: number, fn: (list: ChartWindowState[]) => ChartWindowState[]) =>
+      update((s) => {
+        const next = [...s.charts]
+        next[index] = { ...next[index], windows: fn(next[index].windows ?? []) }
+        return { charts: next }
+      }),
+    [update],
+  )
+  const setWindow = useCallback(
+    (index: number, id: string, fn: (w: ChartWindowState) => ChartWindowState) =>
+      setWindows(index, (list) => list.map((w) => (w.id === id ? fn(w) : w))),
+    [setWindows],
+  )
+  /** The indicators of a chart, or of one of its windows. */
+  const setTargetIndicators = (target: IndicatorTarget, fn: (list: IndicatorInstance[]) => IndicatorInstance[]) =>
+    target.window
+      ? setWindow(target.chart, target.window, (w) => ({ ...w, indicators: fn(w.indicators) }))
+      : setIndicators(target.chart, fn)
+  const windowActions = (index: number): ChartWindowActions => ({
+    onChange: (id, patch) => setWindow(index, id, (w) => ({ ...w, ...patch })),
+    onIndicators: (id, fn) => setWindow(index, id, (w) => ({ ...w, indicators: fn(w.indicators) })),
+    onClose: (id) => setWindows(index, (list) => list.filter((w) => w.id !== id)),
+    onAddIndicator: (id) => setIndicatorsFor({ chart: index, window: id }),
+    onIndicatorSettings: (id, indicatorId) => setEditing({ chart: index, window: id, id: indicatorId }),
+    onSymbolSearch: (id) => setSearch({ initial: '', mode: 'window', window: { chart: index, id } }),
+  })
+  const openWindow = () => setWindows(active, (list) => [...list, newChartWindow(chart.interval, list)])
+  const activeWindows = chart.windows ?? []
+
   // The active chart's oscillators, in legend order: the Floating menu and Alt+1…9.
   const floatables = chart.indicators.filter((i) => canFloat(INDICATOR_BY_TYPE.get(i.type)))
   const toggleFloating = (id: string) => {
@@ -126,7 +174,7 @@ export function App() {
       const next = [...s.charts]
       // New charts start as a copy of the active one, as on TradingView.
       const source = next[Math.min(s.active, next.length - 1)]
-      while (next.length < n) next.push(newChart({ ...source, indicators: cloneIndicators(source.indicators) }))
+      while (next.length < n) next.push(newChart({ ...source, windows: undefined, indicators: cloneIndicators(source.indicators) }))
       return { layout: id, charts: next, active: Math.min(s.active, n - 1) }
     })
 
@@ -169,10 +217,15 @@ export function App() {
     (p: Product) => {
       if (search?.mode === 'watchlist') {
         if (!settings.watchlist.includes(p.id)) update({ watchlist: [...settings.watchlist, p.id] })
+      } else if (search?.mode === 'window' && search.window) {
+        // The chart's own symbol puts the window back to following it.
+        const { chart: index, id } = search.window
+        const follow = p.id === charts[index]?.symbol
+        setWindow(index, id, (w) => ({ ...w, symbol: follow ? undefined : p.id }))
       } else updateChart(active, { symbol: p.id })
       setSearch(null)
     },
-    [search, settings.watchlist, update, updateChart, active],
+    [search, settings.watchlist, update, updateChart, active, charts, setWindow],
   )
 
   const pickRange = (r: RangePreset) => {
@@ -204,7 +257,7 @@ export function App() {
 
   // TradingView's keyboard: type a number for the interval box, letters for symbol search,
   // arrows to scroll and zoom, Alt+R to reset the chart. Keys act on the active chart.
-  const modalOpen = Boolean(search || intervalText !== null || indicatorsOpen || editing)
+  const modalOpen = Boolean(search || intervalText !== null || indicatorsFor || editing)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
@@ -219,10 +272,14 @@ export function App() {
         const n = Number(e.code.slice(5))
         if (n === 0) setAllFloating(!floatables.some((i) => i.floating?.open))
         else if (floatables[n - 1]) toggleFloating(floatables[n - 1].id)
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyW') {
+        // Alt+W: a new chart window over the active chart.
+        e.preventDefault()
+        openWindow()
       } else if (e.ctrlKey || e.metaKey || e.altKey) return
       else if (e.key === '/') {
         e.preventDefault()
-        setIndicatorsOpen(true)
+        setIndicatorsFor({ chart: active })
       } else if (/^[0-9]$/.test(e.key)) {
         e.preventDefault()
         setIntervalText(e.key)
@@ -238,7 +295,10 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const editingInst = editing ? charts[editing.chart]?.indicators.find((i) => i.id === editing.id) : undefined
+  const targetIndicators = (t: IndicatorTarget) =>
+    t.window ? charts[t.chart]?.windows?.find((w) => w.id === t.window)?.indicators : charts[t.chart]?.indicators
+  const editingInst = editing ? targetIndicators(editing)?.find((i) => i.id === editing.id) : undefined
+  const indicatorsWindow = indicatorsFor?.window ? charts[indicatorsFor.chart]?.windows?.find((w) => w.id === indicatorsFor.window) : undefined
 
   return (
     <div
@@ -258,7 +318,7 @@ export function App() {
         onInterval={(id) => updateChart(active, { interval: id })}
         onFavorites={(favorites) => update({ favorites })}
         onChartType={(chartType) => updateChart(active, { chartType })}
-        onIndicators={() => setIndicatorsOpen(true)}
+        onIndicators={() => setIndicatorsFor({ chart: active })}
         floating={floatables.map((i) => ({
           id: i.id,
           title: instanceTitle(INDICATOR_BY_TYPE.get(i.type)!, i),
@@ -266,12 +326,19 @@ export function App() {
         }))}
         onFloat={toggleFloating}
         onFloatAll={setAllFloating}
+        windows={activeWindows.map((w) => ({
+          id: w.id,
+          title: `${getProduct(catalog, w.symbol ?? chart.symbol).ticker} · ${intervalName(w.interval)}`,
+        }))}
+        onNewWindow={openWindow}
+        onCloseWindow={(id) => setWindows(active, (list) => list.filter((w) => w.id !== id))}
         onLayout={pickLayout}
         onSync={(sync) => update({ sync })}
         onFullscreen={toggleFullscreen}
         onScreenshot={screenshot}
         statusLine={settings.statusLine}
         onStatusLine={(statusLine) => update({ statusLine })}
+        onPhoneAccess={() => setPhoneOpen(true)}
         saveControls={<LayoutControls ws={ws} />}
       />
       <LeftToolbar cursor={settings.cursor} onCursor={(cursor) => update({ cursor })} />
@@ -318,6 +385,8 @@ export function App() {
                   )
                 }
                 onFloating={(id, patch) => setFloating(i, id, patch)}
+                favorites={settings.favorites}
+                windowActions={windowActions(i)}
               />
             </div>
           ))}
@@ -349,7 +418,7 @@ export function App() {
       {search && (
         <SymbolSearch
           catalog={catalog}
-          title={search.mode === 'watchlist' ? 'Add symbol' : 'Symbol Search'}
+          title={search.mode === 'watchlist' ? 'Add symbol' : search.mode === 'window' ? 'Symbol for the window' : 'Symbol Search'}
           initial={search.initial}
           onPick={pickSymbol}
           onClose={() => setSearch(null)}
@@ -365,19 +434,25 @@ export function App() {
           onClose={() => setIntervalText(null)}
         />
       )}
-      {indicatorsOpen && (
+      {indicatorsFor && (!indicatorsFor.window || indicatorsWindow) && (
         <IndicatorsDialog
-          onAdd={(type) => setIndicators(active, (list) => [...list, createInstance(type)])}
-          onClose={() => setIndicatorsOpen(false)}
+          title={
+            indicatorsWindow
+              ? `Indicators · ${getProduct(catalog, indicatorsWindow.symbol ?? charts[indicatorsFor.chart].symbol).ticker} ${intervalName(indicatorsWindow.interval)} window`
+              : undefined
+          }
+          onAdd={(type) => setTargetIndicators(indicatorsFor, (list) => [...list, createInstance(type)])}
+          onClose={() => setIndicatorsFor(null)}
         />
       )}
       {editing && editingInst && (
         <IndicatorSettings
           inst={editingInst}
-          onChange={(inst) => setIndicators(editing.chart, (list) => list.map((x) => (x.id === inst.id ? inst : x)))}
+          onChange={(inst) => setTargetIndicators(editing, (list) => list.map((x) => (x.id === inst.id ? inst : x)))}
           onClose={() => setEditing(null)}
         />
       )}
+      {phoneOpen && <PhoneAccessDialog onClose={() => setPhoneOpen(false)} />}
     </div>
   )
 }

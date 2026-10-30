@@ -16,6 +16,24 @@ export interface ChartState {
   paneSizes?: Record<string, number>
   /** The price pane's indicator rows folded away behind the legend's arrow. */
   legendCollapsed?: boolean
+  /** Floating charts over this one, each at its own interval with its own indicators. */
+  windows?: ChartWindowState[]
+}
+
+/** A floating chart over a chart of the layout, as saved with it. */
+export interface ChartWindowState {
+  id: string
+  /** Its own symbol; unset, it follows the chart under it. */
+  symbol?: string
+  interval: string
+  indicators: IndicatorInstance[]
+  /** Where it was dragged to, from the chart's top-left; docked at the top right until then. */
+  x?: number
+  y?: number
+  w: number
+  h: number
+  minimized?: boolean
+  paneSizes?: Record<string, number>
 }
 
 /** TradingView's Status line settings: what the legends on the charts show. */

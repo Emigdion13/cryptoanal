@@ -1715,3 +1715,281 @@ button {
   right: 0;
   min-width: 240px;
 }
+
+/* ── phone access dialog ────────────────────────────────────────────────── */
+
+.phone-dialog {
+  width: min(460px, calc(100vw - 32px));
+}
+.phone-access {
+  gap: 14px;
+}
+.phone-access-note {
+  margin: 0;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+.phone-access-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text);
+}
+.phone-access-row code,
+.phone-access-warn code {
+  display: block;
+  font-size: 12px;
+  color: var(--text);
+  user-select: all;
+  word-break: break-all;
+}
+.phone-access-pass {
+  display: flex;
+  gap: 8px;
+}
+.phone-access-pass input {
+  flex: 1;
+  letter-spacing: 4px;
+}
+.phone-access-switch {
+  padding: 0;
+  height: auto;
+}
+.phone-access-dim {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.phone-access-ok {
+  color: var(--up);
+}
+.phone-access-warn {
+  color: #f7c948;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: right;
+}
+
+/* ── chart windows: another timeframe of the chart, floating over it ────── */
+
+.chart-window {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid #363636;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+.chart-window.is-moving {
+  user-select: none;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7), 0 0 18px rgba(41, 98, 255, 0.18);
+}
+.cw-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 29px;
+  padding: 0 3px 0 4px;
+  background: rgba(30, 30, 30, 0.96);
+  border-bottom: 1px solid #2b2b2b;
+  border-radius: 6px 6px 0 0;
+  font-size: 12px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.chart-window.is-moving .cw-head {
+  cursor: grabbing;
+}
+.chart-window.is-minimized .cw-head {
+  border-bottom: 0;
+  border-radius: 6px;
+}
+.cw-symbol {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  color: var(--text);
+}
+.cw-symbol:hover {
+  background: var(--hover);
+}
+/* Its own symbol rather than the chart's. */
+.cw-symbol.is-own {
+  color: #ff9800;
+}
+.cw-intervals {
+  display: flex;
+  gap: 1px;
+  min-width: 0;
+  overflow: hidden;
+}
+.cw-iv {
+  flex: none;
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: var(--text-muted);
+}
+button.cw-iv:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.cw-iv.on,
+button.cw-iv.on:hover {
+  background: var(--active);
+  color: #fff;
+}
+.cw-space {
+  margin-left: auto;
+}
+.cw-btn {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  color: var(--text-muted);
+}
+.cw-btn:hover,
+.cw-btn.open {
+  background: var(--hover);
+  color: var(--text);
+}
+.cw-btn.is-close:hover {
+  color: var(--down);
+}
+.cw-dropdown {
+  position: relative;
+  flex: none;
+}
+.cw-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 2px;
+  padding: 6px;
+  background: var(--menu);
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.55);
+  cursor: default;
+}
+.cw-menu button {
+  padding: 4px 9px;
+  border-radius: 3px;
+  color: var(--text);
+  text-align: left;
+}
+.cw-menu button:hover {
+  background: var(--hover);
+}
+.cw-menu button.on {
+  background: var(--active);
+  color: #fff;
+}
+.cw-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 0 0 6px 6px;
+}
+.cw-body .legend {
+  font-size: 12px;
+}
+.cw-body .realtime-btn {
+  right: 72px;
+}
+.cw-edge {
+  position: absolute;
+  z-index: 6;
+  touch-action: none;
+}
+.cw-edge.is-n,
+.cw-edge.is-s {
+  left: 10px;
+  right: 10px;
+  height: 7px;
+  cursor: ns-resize;
+}
+.cw-edge.is-n {
+  top: -4px;
+}
+.cw-edge.is-s {
+  bottom: -4px;
+}
+.cw-edge.is-e,
+.cw-edge.is-w {
+  top: 10px;
+  bottom: 10px;
+  width: 7px;
+  cursor: ew-resize;
+}
+.cw-edge.is-e {
+  right: -4px;
+}
+.cw-edge.is-w {
+  left: -4px;
+}
+.cw-edge.is-ne,
+.cw-edge.is-nw,
+.cw-edge.is-se,
+.cw-edge.is-sw {
+  width: 14px;
+  height: 14px;
+}
+.cw-edge.is-nw {
+  top: -4px;
+  left: -4px;
+  cursor: nwse-resize;
+}
+.cw-edge.is-ne {
+  top: -4px;
+  right: -4px;
+  cursor: nesw-resize;
+}
+.cw-edge.is-sw {
+  bottom: -4px;
+  left: -4px;
+  cursor: nesw-resize;
+}
+/* The bottom-right corner shows its grip. */
+.cw-edge.is-se {
+  right: -1px;
+  bottom: -1px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 55%, #555 55%, #555 62%, transparent 62%, transparent 75%, #555 75%, #555 82%, transparent 82%);
+  border-radius: 0 0 6px 0;
+}
+.cw-edge.is-se:hover {
+  background: linear-gradient(135deg, transparent 55%, #2962ff 55%, #2962ff 62%, transparent 62%, transparent 75%, #2962ff 75%, #2962ff 82%, transparent 82%);
+}
+/* The frame lights up while it is moved or resized. */
+.chart-window.is-moving {
+  border-color: rgba(41, 98, 255, 0.6);
+}
+
+.menu-remove {
+  display: inline-grid;
+  place-items: center;
+  margin-left: auto;
+  border-radius: 3px;
+  color: var(--text-muted);
+}
+.menu-remove:hover {
+  background: var(--hover);
+  color: var(--down);
+}

@@ -11,6 +11,8 @@ export class CandleCache {
   exhausted = false
   private older: Promise<number> | null = null
   private lastPageWasEmpty = false
+  /** The newest trade folded in: every chart on this product and granularity hands it the same trades. */
+  private lastTradeId = 0
 
   constructor(
     readonly product: string,
@@ -82,14 +84,18 @@ export class CandleCache {
   }
 
   /**
-   * Folds a trade into the newest candle. Returns false when the trade is older than the
-   * newest candle or nothing is loaded yet.
+   * Folds a trade into the newest candle, once however many charts pass it on. Returns false when
+   * the trade is older than the newest candle or nothing is loaded yet.
    */
-  applyTrade(price: number, size: number, time: number): boolean {
+  applyTrade(price: number, size: number, time: number, id?: number): boolean {
     const last = this.candles[this.candles.length - 1]
     if (!last) return false
     const start = Math.floor(time / this.granularity) * this.granularity
     if (start < last.time) return false
+    if (id !== undefined && Number.isFinite(id)) {
+      if (id <= this.lastTradeId) return true
+      this.lastTradeId = id
+    }
     if (start === last.time) {
       if (price > last.high) last.high = price
       if (price < last.low) last.low = price

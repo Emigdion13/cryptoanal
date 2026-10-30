@@ -1,13 +1,14 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { ChartEngine, type CursorMode, type LegendState, type PaneRect } from '../chart/ChartEngine'
-import { granularityFor, parseInterval } from '../data/intervals'
+import { parseInterval } from '../data/intervals'
 import { watchKalshi } from '../data/kalshi'
 import { describe, getProduct, type Catalog } from '../data/products'
-import { defaultInputs, INDICATOR_BY_TYPE, instanceTitle } from '../indicators/catalog'
+import { INDICATOR_BY_TYPE, instanceTitle } from '../indicators/catalog'
 import type { FloatingState } from '../indicators/types'
+import { ChartWindow, type ChartWindowActions } from './ChartWindow'
 import { FloatingCard } from './FloatingCard'
 import { canFloat } from './floatingModel'
-import { useChartData } from '../useChartData'
+import { feedGranularitiesFor, useChartData } from '../useChartData'
 import { RealtimeIcon } from './icons'
 import { IndicatorRow, MainLegend, type IndicatorActions } from './Legend'
 import type { ChartState, StatusLine } from './settings'
@@ -32,6 +33,9 @@ interface Props extends IndicatorActions {
   onCollapseLegend: (collapsed: boolean) => void
   /** Moves, resizes, minimizes or closes an indicator's floating window. */
   onFloating: (id: string, patch: Partial<FloatingState>) => void
+  /** The toolbar's favorite intervals, for the chart windows' headers. */
+  favorites: string[]
+  windowActions: ChartWindowActions
 }
 
 /** One chart of the layout, with its own symbol, interval, data feed and legends. */
@@ -44,6 +48,8 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
   const [legend, setLegend] = useState<LegendState | null>(null)
   const [panes, setPanes] = useState<PaneRect[]>([])
   const [realtime, setRealtime] = useState(true)
+  /** The chart window last clicked: on top of the others. */
+  const [frontWindow, setFrontWindow] = useState<string | null>(null)
 
   useEffect(() => {
     const e = new ChartEngine(hostRef.current!)
@@ -78,17 +84,7 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
   useEffect(() => engine?.setIndicators(state.indicators), [engine, state.indicators])
 
   // Coinbase granularities the indicators read besides the chart's own bars.
-  const feedGranularities = useMemo(() => {
-    if (!interval) return []
-    const grans = new Set<number>()
-    for (const inst of state.indicators) {
-      const def = INDICATOR_BY_TYPE.get(inst.type)
-      if (!def?.feeds || inst.hidden) continue
-      for (const seconds of def.feeds({ ...defaultInputs(def), ...inst.inputs }, interval))
-        grans.add(granularityFor(seconds))
-    }
-    return [...grans].sort((a, b) => a - b)
-  }, [state.indicators, interval])
+  const feedGranularities = useMemo(() => feedGranularitiesFor(state.indicators, interval), [state.indicators, interval])
   const { status, showRange } = useChartData(engine, product, state.interval, feedGranularities)
   useImperativeHandle(ref, () => ({ showRange: (from, iv) => showRange(from, iv, state.symbol) }), [showRange, state.symbol])
 
@@ -101,6 +97,8 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
   const floating = state.indicators.filter((i) => i.floating?.open && canFloat(INDICATOR_BY_TYPE.get(i.type)))
   // Cards not dragged anywhere yet line up along the top right, in legend order.
   const docked = floating.filter((i) => i.floating?.x === undefined)
+  const windows = state.windows ?? []
+  const dockedWindows = windows.filter((w) => w.x === undefined)
 
   return (
     <div
@@ -158,6 +156,25 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
             />
           )
         })}
+      {engine &&
+        windows.map((win) => (
+          <ChartWindow
+            key={win.id}
+            win={win}
+            product={getProduct(catalog, win.symbol ?? state.symbol)}
+            parentSymbol={product.id}
+            parentEngine={engine}
+            catalog={catalog}
+            chartType={state.chartType}
+            cursor={cursor}
+            statusLine={props.statusLine}
+            favorites={props.favorites}
+            dockIndex={dockedWindows.indexOf(win)}
+            front={win.id === frontWindow}
+            onFront={() => setFrontWindow(win.id)}
+            actions={props.windowActions}
+          />
+        ))}
       {status === 'error' && <div className="chart-toast">Can't reach Coinbase — retrying…</div>}
     </div>
   )

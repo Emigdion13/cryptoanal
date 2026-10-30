@@ -10,11 +10,13 @@ import {
   CHART_TYPE_ICONS,
   CheckIcon,
   ChevronDown,
+  CloseIcon,
   ChevronRight,
   FloatIcon,
   FullscreenIcon,
   GearIcon,
   FxIcon,
+  PlusIcon,
   SearchIcon,
   StarIcon,
 } from './icons'
@@ -47,11 +49,17 @@ interface Props {
   onScreenshot: () => void
   statusLine: StatusLine
   onStatusLine: (statusLine: StatusLine) => void
+  /** ⚙ → Phone access: the iPhone page's passcode and switch. */
+  onPhoneAccess: () => void
   onIndicators: () => void
   /** The active chart's oscillators, for the Floating menu. */
   floating: { id: string; title: string; open: boolean }[]
   onFloat: (id: string) => void
   onFloatAll: (open: boolean) => void
+  /** The active chart's floating chart windows: "BTCUSD · 1h". */
+  windows: { id: string; title: string }[]
+  onNewWindow: () => void
+  onCloseWindow: (id: string) => void
   layout: string
   sync: SyncOptions
   onLayout: (id: string) => void
@@ -101,14 +109,21 @@ export function Header(props: Props) {
         <FxIcon />
         <span>Indicators</span>
       </button>
-      <FloatingMenu items={props.floating} onToggle={props.onFloat} onAll={props.onFloatAll} />
+      <FloatingMenu
+        items={props.floating}
+        onToggle={props.onFloat}
+        onAll={props.onFloatAll}
+        windows={props.windows}
+        onNewWindow={props.onNewWindow}
+        onCloseWindow={props.onCloseWindow}
+      />
       <div className="sep" />
       <div className="header-spacer" />
       <LayoutMenu layout={props.layout} sync={props.sync} onLayout={props.onLayout} onSync={props.onSync} />
       <div className="sep" />
       {props.saveControls}
       <div className="sep" />
-      <StatusLineMenu value={props.statusLine} onChange={props.onStatusLine} />
+      <StatusLineMenu value={props.statusLine} onChange={props.onStatusLine} onPhoneAccess={props.onPhoneAccess} />
       <button className="tb-btn icon" onClick={props.onFullscreen} title="Fullscreen mode">
         <FullscreenIcon />
       </button>
@@ -224,18 +239,23 @@ function ChartTypeMenu({ value, onPick }: { value: ChartType; onPick: (t: ChartT
 
 /**
  * V2's Floating selector: one menu for every floating window of the active chart, with a count of
- * the open ones. It stays open across clicks, so several windows can be flipped in one visit.
+ * the open ones. It stays open across clicks, so several windows can be flipped in one visit. Under
+ * them, the chart windows: other timeframes of the chart, with indicators of their own.
  */
 function FloatingMenu(props: {
   items: { id: string; title: string; open: boolean }[]
   onToggle: (id: string) => void
   onAll: (open: boolean) => void
+  windows: { id: string; title: string }[]
+  onNewWindow: () => void
+  onCloseWindow: (id: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const close = useCallback(() => setOpen(false), [])
   useDismiss(ref, open, close)
-  const count = props.items.filter((i) => i.open).length
+  const count = props.items.filter((i) => i.open).length + props.windows.length
+  const openCards = props.items.filter((i) => i.open).length
 
   return (
     <div className="dropdown" ref={ref}>
@@ -262,12 +282,31 @@ function FloatingMenu(props: {
             </div>
           ))}
           {props.items.length > 1 && (
-            <div className="menu-item with-icon" onClick={() => props.onAll(count === 0)}>
+            <div className="menu-item with-icon" onClick={() => props.onAll(openCards === 0)}>
               <span className="menu-check" />
-              <span className="menu-label">{count === 0 ? 'Open all' : 'Close all'}</span>
+              <span className="menu-label">{openCards === 0 ? 'Open all' : 'Close all'}</span>
               <span className="menu-shortcut">Alt+0</span>
             </div>
           )}
+          <div className="menu-heading">CHART WINDOWS</div>
+          {props.windows.map((w) => (
+            <div key={w.id} className="menu-item with-icon">
+              <span className="menu-check">
+                <CheckIcon />
+              </span>
+              <span className="menu-label">{w.title}</span>
+              <button className="menu-remove" title="Close window" onClick={() => props.onCloseWindow(w.id)}>
+                <CloseIcon size={18} />
+              </button>
+            </div>
+          ))}
+          <div className="menu-item with-icon" onClick={props.onNewWindow}>
+            <span className="menu-check">
+              <PlusIcon size={18} />
+            </span>
+            <span className="menu-label">New chart window</span>
+            <span className="menu-shortcut">Alt+W</span>
+          </div>
         </div>
       )}
     </div>
@@ -289,7 +328,15 @@ const STATUS_ROWS: { key: keyof StatusLine; label: string }[] = [
  * logo and name, its OHLC and change, the indicators' titles, arguments and values. For every
  * chart of the layout.
  */
-function StatusLineMenu({ value, onChange }: { value: StatusLine; onChange: (v: StatusLine) => void }) {
+function StatusLineMenu({
+  value,
+  onChange,
+  onPhoneAccess,
+}: {
+  value: StatusLine
+  onChange: (v: StatusLine) => void
+  onPhoneAccess: () => void
+}) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const close = useCallback(() => setOpen(false), [])
@@ -320,6 +367,16 @@ function StatusLineMenu({ value, onChange }: { value: StatusLine; onChange: (v: 
               <span className="menu-label">Reset to defaults</span>
             </div>
           )}
+          <div className="menu-section static">PHONE</div>
+          <div
+            className="menu-item"
+            onClick={() => {
+              setOpen(false)
+              onPhoneAccess()
+            }}
+          >
+            <span className="menu-label">Phone access…</span>
+          </div>
         </div>
       )}
     </div>

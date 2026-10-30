@@ -1,0 +1,192 @@
+/* The phone page: one scrolling column, black like the desktop's chart panels. */
+
+body.phone-body {
+  background: var(--panel);
+  overflow: auto;
+  overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+}
+.phone-body #root {
+  height: auto;
+  min-height: 100%;
+}
+
+.phone {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.phone-head {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(env(safe-area-inset-top) + 8px) 12px 8px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.phone-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 16px;
+}
+.phone-title b {
+  font-weight: 600;
+}
+.phone-spacer {
+  flex: 1;
+}
+.phone-dim {
+  color: var(--text-muted);
+}
+.phone-link {
+  color: var(--text-dim);
+  font-size: 14px;
+  padding: 6px 4px;
+}
+
+.phone-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+.phone-tabs button {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 16px;
+  background: var(--hover);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.phone-tabs button.on {
+  background: var(--active);
+  color: #fff;
+}
+
+.phone-chart {
+  position: relative;
+  background: var(--panel);
+}
+/* The legend fits the phone: wraps, and leaves the price axis free. */
+.phone-chart .legend {
+  max-width: calc(100% - 72px);
+  font-size: 12px;
+}
+.phone-chart .legend-title {
+  font-size: 13px;
+}
+.phone-chart .ind-row {
+  flex-wrap: wrap;
+}
+.phone-chart .ind-row:hover {
+  background: none;
+}
+
+.phone-wait,
+.phone-problem {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.phone-problem {
+  padding: 10px 16px;
+  color: var(--down);
+}
+
+/* Sign-in and refusals */
+.phone-center {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px 16px;
+  text-align: center;
+}
+.phone-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 600;
+}
+.phone-note {
+  max-width: 320px;
+  margin: 0;
+  line-height: 1.45;
+}
+.phone-error {
+  margin: 0;
+  color: var(--down);
+}
+.phone-code {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+}
+.phone-code input {
+  width: 200px;
+  padding: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--menu);
+  color: var(--text);
+  font: 600 28px/1 var(--font);
+  letter-spacing: 10px;
+  text-align: center;
+  text-indent: 10px;
+}
+.phone-code input:focus {
+  outline: none;
+  border-color: var(--active);
+}
+.phone-btn {
+  min-width: 120px;
+  padding: 12px 18px;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--text);
+  font-size: 15px;
+}
+.phone-btn.primary {
+  background: var(--active);
+  color: #fff;
+}
+.phone-btn:disabled {
+  opacity: 0.5;
+}
+
+/* "Use Face ID next time?" */
+.phone-sheet {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom) + 12px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--menu);
+  color: var(--text);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+}
+.phone-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}

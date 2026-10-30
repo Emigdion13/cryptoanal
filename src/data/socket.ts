@@ -6,6 +6,8 @@ export interface Match {
   size: number
   /** Seconds since the epoch, with fractions. */
   time: number
+  /** Coinbase's trade id: rising per product. */
+  id: number
 }
 
 export interface Ticker {
@@ -112,6 +114,7 @@ class CoinbaseFeed {
         price: Number(msg.price),
         size: Number(msg.size),
         time: Date.parse(msg.time) / 1000,
+        id: Number(msg.trade_id),
       }
       for (const fn of set) fn(m)
     } else if (msg.type === 'ticker') {

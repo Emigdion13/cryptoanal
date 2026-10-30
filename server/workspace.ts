@@ -7,13 +7,15 @@
  * `{ version: 1, settings, layouts: { id: layout } }`. Changes arrive as PATCHes of single
  * entries (`settings`, one layout, or a layout's removal) and are applied one at a time to the
  * file as it is on disk, so two tabs saving different layouts never undo each other.
- * Reads are open; writes only from this computer (loopback) unless CRYPTOANAL_ALLOW_REMOTE=1.
+ * Reads are open; writes only from this computer (loopback, not through a proxy) unless
+ * CRYPTOANAL_ALLOW_REMOTE=1. A phone through Tailscale is gated by server/phone.ts.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { Plugin } from 'vite'
+import { isLocal } from './proxy'
 
 /** Far above any real workspace (a layout is a few KB); only a guard. */
 export const WORKSPACE_MAX_BYTES = 32 * 1024 * 1024
@@ -67,11 +69,6 @@ class WorkspaceError extends Error {
   ) {
     super(message)
   }
-}
-
-function isLoopback(req: IncomingMessage): boolean {
-  const address = req.socket.remoteAddress ?? ''
-  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
 }
 
 async function body(req: IncomingMessage): Promise<unknown> {
@@ -131,7 +128,8 @@ export function createWorkspaceApi(
   }
 
   const dispatch = async (req: IncomingMessage, res: ServerResponse) => {
-    const writable = allowRemoteWrites || isLoopback(req)
+    // A phone through Tailscale's proxy arrives from loopback too: it is not this computer.
+    const writable = allowRemoteWrites || isLocal(req)
     if (req.method === 'GET') {
       const data = await serial(read)
       json(res, 200, { file, writable, exists: data !== null, data })

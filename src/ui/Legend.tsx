@@ -13,8 +13,8 @@ export interface IndicatorActions {
   onToggle: (id: string) => void
   onSettings: (id: string) => void
   onRemove: (id: string) => void
-  /** Opens or closes its floating window. */
-  onFloat: (id: string) => void
+  /** Opens or closes its floating window; left out where indicators can't float (a chart window). */
+  onFloat?: (id: string) => void
 }
 
 interface RowProps extends IndicatorActions {
@@ -23,10 +23,12 @@ interface RowProps extends IndicatorActions {
   product: Product
   engine: ChartEngine | null
   state: LegendState | null
+  /** The phone page: title and values only, no buttons. */
+  readOnly?: boolean
 }
 
 /** One indicator in the legend: title, values, and TradingView's hover buttons. */
-export function IndicatorRow({ inst, status, product, engine, state, onToggle, onSettings, onRemove, onFloat }: RowProps) {
+export function IndicatorRow({ inst, status, product, engine, state, readOnly, onToggle, onSettings, onRemove, onFloat }: RowProps) {
   const def = INDICATOR_BY_TYPE.get(inst.type)
   if (!def) return null
   // The volume's "· BTC" is the symbol's name: it goes with the symbol title.
@@ -41,7 +43,7 @@ export function IndicatorRow({ inst, status, product, engine, state, onToggle, o
         : def.short
   const values = engine && state && !inst.hidden && status.indicatorValues ? engine.indicatorValues(inst.id, state.index) : []
   return (
-    <div className={`legend-row ind-row${inst.hidden ? ' off' : ''}`} onDoubleClick={() => onSettings(inst.id)}>
+    <div className={`legend-row ind-row${inst.hidden ? ' off' : ''}`} onDoubleClick={() => !readOnly && onSettings(inst.id)}>
       {title && <span className="ind-title">{title}</span>}
       <span className="ind-values">
         {values.map((v) => (
@@ -50,26 +52,28 @@ export function IndicatorRow({ inst, status, product, engine, state, onToggle, o
           </b>
         ))}
       </span>
-      <span className="ind-actions">
-        <button title={inst.hidden ? 'Show' : 'Hide'} onClick={() => onToggle(inst.id)}>
-          <EyeIcon off={inst.hidden} />
-        </button>
-        {canFloat(def) && (
-          <button
-            className={inst.floating?.open ? 'on' : undefined}
-            title="Float in a window (instead of this pane)"
-            onClick={() => onFloat(inst.id)}
-          >
-            <FloatIcon />
+      {!readOnly && (
+        <span className="ind-actions">
+          <button title={inst.hidden ? 'Show' : 'Hide'} onClick={() => onToggle(inst.id)}>
+            <EyeIcon off={inst.hidden} />
           </button>
-        )}
-        <button title="Settings" onClick={() => onSettings(inst.id)}>
-          <GearIcon />
-        </button>
-        <button title="Remove" onClick={() => onRemove(inst.id)}>
-          <CloseIcon size={18} />
-        </button>
-      </span>
+          {onFloat && canFloat(def) && (
+            <button
+              className={inst.floating?.open ? 'on' : undefined}
+              title="Float in a window (instead of this pane)"
+              onClick={() => onFloat(inst.id)}
+            >
+              <FloatIcon />
+            </button>
+          )}
+          <button title="Settings" onClick={() => onSettings(inst.id)}>
+            <GearIcon />
+          </button>
+          <button title="Remove" onClick={() => onRemove(inst.id)}>
+            <CloseIcon size={18} />
+          </button>
+        </span>
+      )}
     </div>
   )
 }
@@ -85,6 +89,7 @@ interface MainProps extends IndicatorActions {
   /** The overlays' rows are folded away, as TradingView's arrow under the legend does. */
   collapsed: boolean
   onCollapse: (collapsed: boolean) => void
+  readOnly?: boolean
 }
 
 /** The price pane's legend: name, interval, exchange, OHLC and change, then its overlays. */

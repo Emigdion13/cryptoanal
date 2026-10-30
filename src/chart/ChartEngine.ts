@@ -732,7 +732,12 @@ export class ChartEngine {
         return
       }
       this.showHorzLine(price !== null)
-      this.chart.setCrosshairPosition(price ?? bar.close, asTime(bar.time), this.main)
+      try {
+        this.chart.setCrosshairPosition(price ?? bar.close, asTime(bar.time), this.main)
+      } catch {
+        // A chart that just opened has no price scale laid out to put the crosshair on yet.
+        this.chart.clearCrosshairPosition()
+      }
     } finally {
       this.syncing = false
     }
@@ -1116,7 +1121,8 @@ export class ChartEngine {
     const onDown = (event: PointerEvent) => {
       drag = null
       pressed = { structure: this.structure, heights: chart.panes().map((p) => p.getHeight()) }
-      if (event.button !== 0 || hit(event) !== 'plot' || this.priceMode === 'percent') return
+      // A finger's vertical swipe scrolls the page (the phone's stacked panes), never the price.
+      if (event.button !== 0 || event.pointerType === 'touch' || hit(event) !== 'plot' || this.priceMode === 'percent') return
       if (!chart.priceScale('right').options().autoScale) return
       drag = { id: event.pointerId, y: event.clientY, range: null }
     }

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChartEngine } from './chart/ChartEngine'
 import { getCache } from './data/cache'
-import { aggregate, aggregateLast, baseGranularity, parseInterval } from './data/intervals'
+import { aggregate, aggregateLast, baseGranularity, granularityFor, parseInterval, type IntervalDef } from './data/intervals'
 import { feed } from './data/socket'
 import type { Product } from './data/types'
+import { defaultInputs, INDICATOR_BY_TYPE } from './indicators/catalog'
+import type { IndicatorInstance } from './indicators/types'
 
 /** Bars to have on hand when a chart opens; more load as you scroll back. */
 const TARGET_BARS = 500
@@ -11,6 +13,18 @@ const TARGET_BARS = 500
 const MAX_INITIAL_PAGES = 12
 
 export type DataStatus = 'loading' | 'ready' | 'error'
+
+/** Coinbase granularities a chart's shown indicators read besides the chart's own bars. */
+export function feedGranularitiesFor(indicators: readonly IndicatorInstance[], interval: IntervalDef | null): number[] {
+  if (!interval) return []
+  const grans = new Set<number>()
+  for (const inst of indicators) {
+    const def = INDICATOR_BY_TYPE.get(inst.type)
+    if (!def?.feeds || inst.hidden) continue
+    for (const seconds of def.feeds({ ...defaultInputs(def), ...inst.inputs }, interval)) grans.add(granularityFor(seconds))
+  }
+  return [...grans].sort((a, b) => a - b)
+}
 
 interface PendingRange {
   product: string
@@ -81,7 +95,7 @@ export function useChartData(
     })()
 
     const offTrades = feed.subscribe('matches', product.id, (m) => {
-      if (!cache.applyTrade(m.price, m.size, m.time)) return
+      if (!cache.applyTrade(m.price, m.size, m.time, m.id)) return
       const bar = aggregateLast(cache.candles, def)
       if (bar && alive) engine.updateLast(bar)
     })
@@ -170,7 +184,7 @@ export function useChartData(
     const others = caches.filter((c) => c.granularity !== chartGran)
     const offTrades = feed.subscribe('matches', product.id, (m) => {
       let changed = false
-      for (const c of others) if (c.applyTrade(m.price, m.size, m.time)) changed = true
+      for (const c of others) if (c.applyTrade(m.price, m.size, m.time, m.id)) changed = true
       if (changed && alive) engine.feedsTicked()
     })
     // History the chart loads later (scrolling back) is matched once its new bars are in.

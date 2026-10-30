@@ -6,7 +6,7 @@ import { CloseIcon, SearchIcon } from './icons'
 const CATEGORIES: ('All' | Category)[] = ['All', 'Trend', 'Oscillators', 'Volatility', 'Volume', 'Price Action']
 
 /** TradingView's "Indicators" dialog: search, categories, click a name to add it. */
-export function IndicatorsDialog(props: { onAdd: (type: string) => void; onClose: () => void }) {
+export function IndicatorsDialog(props: { title?: string; onAdd: (type: string) => void; onClose: () => void }) {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('All')
   const [added, setAdded] = useState<string | null>(null)
@@ -24,7 +24,7 @@ export function IndicatorsDialog(props: { onAdd: (type: string) => void; onClose
     <div className="overlay" onPointerDown={(e) => e.target === e.currentTarget && props.onClose()}>
       <div className="dialog indicators-dialog" onKeyDown={(e) => e.key === 'Escape' && props.onClose()}>
         <div className="dialog-head">
-          <span className="dialog-title">Indicators</span>
+          <span className="dialog-title">{props.title ?? 'Indicators'}</span>
           <button className="dialog-close" onClick={props.onClose} title="Close">
             <CloseIcon />
           </button>
