@@ -822,14 +822,14 @@ button.phone-account:active {
 /* Left of the quick-trade button: the time left in Kalshi's running round; a tap opens Next round. */
 .phone-next-timer {
   position: fixed;
-  right: calc(50% + 38px);
+  right: calc(50% + 36px);
   bottom: calc(env(safe-area-inset-bottom) + 20px);
   z-index: 16;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 72px;
+  width: 64px;
   height: 44px;
   padding: 0 6px;
   border: 1px solid var(--phone-line);
@@ -868,12 +868,12 @@ button.phone-account:active {
   color: #f0b429;
 }
 
-/* Left of the timer: buyers vs sellers, Kalshi style; the fill behind splits at the buyers' share. */
-.phone-flow {
-  --buy: 50%;
+/* Left of the timer: Kalshi's Up and Down chances; the fill behind splits at Up's. */
+.phone-odds {
+  --up: 50%;
   position: fixed;
-  left: 8px;
-  right: calc(50% + 118px);
+  left: 6px;
+  right: calc(50% + 106px);
   bottom: calc(env(safe-area-inset-bottom) + 20px);
   z-index: 16;
   display: flex;
@@ -886,11 +886,51 @@ button.phone-account:active {
   overflow: hidden;
   border: 1px solid var(--phone-line);
   border-radius: 999px;
-  background: linear-gradient(to right, rgba(43, 185, 155, 0.22) var(--buy), rgba(237, 103, 115, 0.22) var(--buy)), rgba(21, 26, 33, 0.96);
+  background: linear-gradient(to right, rgba(43, 185, 155, 0.22) var(--up), rgba(237, 103, 115, 0.22) var(--up)), rgba(21, 26, 33, 0.96);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.phone-odds-up {
+  color: #4fe0c0;
+}
+.phone-odds-down {
+  color: #ff8a94;
+}
+.phone-odds.is-up .phone-odds-up,
+.phone-odds.is-down .phone-odds-down {
+  font-weight: 700;
+}
+.phone-odds.is-up {
+  border-color: rgba(43, 185, 155, 0.6);
+}
+.phone-odds.is-down {
+  border-color: rgba(237, 103, 115, 0.6);
+}
+
+/* Top right, over the price chart's corner (under the card's price): buyers vs sellers over one
+   bar of the chart's timing. */
+.phone-flow {
+  --buy: 50%;
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 124px);
+  right: 8px;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid var(--phone-line);
+  border-radius: 999px;
+  background: linear-gradient(to right, rgba(43, 185, 155, 0.24) var(--buy), rgba(237, 103, 115, 0.24) var(--buy)), rgba(21, 26, 33, 0.96);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
 }
@@ -902,7 +942,6 @@ button.phone-account:active {
 }
 .phone-flow.is-buyers .phone-flow-up,
 .phone-flow.is-sellers .phone-flow-down {
-  font-size: 14px;
   font-weight: 700;
 }
 .phone-flow.is-buyers {
@@ -915,8 +954,8 @@ button.phone-account:active {
   border-style: dashed;
 }
 
-/* Right of the quick-trade button: the window buyers vs sellers is taken over. */
-.phone-flow-windows {
+/* Right of the quick-trade button: the chart's timing. */
+.phone-timings {
   position: fixed;
   left: calc(50% + 38px);
   right: 8px;
@@ -932,7 +971,7 @@ button.phone-account:active {
   background: rgba(21, 26, 33, 0.96);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
 }
-.phone-flow-windows button {
+.phone-timings button {
   flex: 1;
   min-width: 0;
   padding: 0;
@@ -942,7 +981,7 @@ button.phone-account:active {
   font-variant-numeric: tabular-nums;
   touch-action: manipulation;
 }
-.phone-flow-windows button.is-on {
+.phone-timings button.is-on {
   background: #12304f;
   color: #6ab0ff;
   font-weight: 600;

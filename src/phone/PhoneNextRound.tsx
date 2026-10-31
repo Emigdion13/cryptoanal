@@ -44,6 +44,32 @@ function useNow(skewMs: number) {
 
 const working = (trade: Trade): ArmedBuy | null => trade.state?.armed?.find((a) => ARMED_WORKING.includes(a.state)) ?? null
 
+/** Kalshi's chance for Up: the middle of its bid and ask, in % (one side alone when that is all there is). */
+export function upChance(upBid: number | null, upAsk: number | null): number | null {
+  if (upBid !== null && upAsk !== null) return (upBid + upAsk) / 20
+  const one = upBid ?? upAsk
+  return one === null ? null : one / 10
+}
+
+/** Left of the round's timer: Kalshi's Up and Down chances for the running round, as Kalshi shows them. */
+export function KalshiOdds({ trade }: { trade: Trade }) {
+  const market = trade.state?.market ?? null
+  const up = market ? upChance(market.upBid, market.upAsk) : null
+  const shown = up === null ? null : Math.round(up)
+  const lead = shown === null ? '' : shown > 50 ? ' is-up' : shown < 50 ? ' is-down' : ''
+  return (
+    <div
+      className={`phone-odds${lead}`}
+      style={up !== null ? { ['--up' as string]: `${up}%` } : undefined}
+      role="status"
+      aria-label={shown !== null ? `Kalshi: Up ${shown}%, Down ${100 - shown}%` : 'Kalshi: no prices yet'}
+    >
+      <span className="phone-odds-up">Up {shown !== null ? `${shown}%` : '–'}</span>
+      <span className="phone-odds-down">Down {shown !== null ? `${100 - shown}%` : '–'}</span>
+    </div>
+  )
+}
+
 /**
  * Left of the quick-trade button: the time left in Kalshi's running 15-minute round. Amber with
  * the side and cap while a next-round buy is armed. A tap opens the Next round sheet.

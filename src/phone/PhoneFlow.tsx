@@ -1,37 +1,69 @@
 import { useState } from 'react'
-import { FLOW_WINDOWS, flowWindowText, useOrderFlow, type FlowWindow } from '../data/flow'
+import { useOrderFlow } from '../data/flow'
+import { parseInterval } from '../data/intervals'
 
-const WINDOW_KEY = 'cryptoanal.phone.flowWindow'
+const TIMING_KEY = 'cryptoanal.phone.timing'
 
-/** The window picked on the right of the quick-trade button, remembered on the phone. */
-export function useFlowWindow() {
-  const [span, setSpanState] = useState<FlowWindow>(() => {
+/** The timings right of the quick-trade button: the phone's chart and every indicator on it. */
+export const TIMINGS = [
+  { id: '30S', label: '30s' },
+  { id: '1', label: '1m' },
+  { id: '3', label: '3m' },
+  { id: '5', label: '5m' },
+  { id: '15', label: '15m' },
+] as const
+
+/**
+ * The phone's own timing, remembered on the phone; null follows the desktop chart's interval
+ * (picking another desktop chart tab goes back to that).
+ */
+export function usePhoneTiming() {
+  const [timing, setTimingState] = useState<string | null>(() => {
     try {
-      const saved = Number(localStorage.getItem(WINDOW_KEY))
-      return (FLOW_WINDOWS as readonly number[]).includes(saved) ? (saved as FlowWindow) : 60
+      const saved = localStorage.getItem(TIMING_KEY)
+      return TIMINGS.some((t) => t.id === saved) ? saved : null
     } catch {
-      return 60
+      return null
     }
   })
-  const setSpan = (next: FlowWindow) => {
+  const setTiming = (next: string | null) => {
     try {
-      localStorage.setItem(WINDOW_KEY, String(next))
+      if (next) localStorage.setItem(TIMING_KEY, next)
+      else localStorage.removeItem(TIMING_KEY)
     } catch {
       // Remembered for this visit only.
     }
-    setSpanState(next)
+    setTimingState(next)
   }
-  return [span, setSpan] as const
+  return [timing, setTiming] as const
 }
 
+/** Right of the quick-trade button: the chart's timing. */
+export function TimingPicker({ interval, onChange }: { interval: string; onChange: (id: string) => void }) {
+  return (
+    <div className="phone-timings" role="radiogroup" aria-label="Chart timing">
+      {TIMINGS.map((t) => (
+        <button key={t.id} type="button" role="radio" aria-checked={interval === t.id} className={interval === t.id ? 'is-on' : ''} onClick={() => onChange(t.id)}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Buyers vs sellers are counted over one bar of the chart's timing, at most 15 minutes. */
+const MAX_FLOW_SEC = 900
+const flowSeconds = (interval: string) => Math.min(MAX_FLOW_SEC, parseInterval(interval)?.seconds ?? 60)
 const pct = (v: number) => `${Math.round(v)}%`
+const span = (sec: number) => (sec < 60 ? `${sec}s` : `${sec / 60}m`)
 
 /**
- * Left of the round's timer: who is winning, buyers or sellers, as Kalshi shows Up and Down. The
- * split is the volume of Coinbase trades whose aggressor bought vs sold, over the picked window.
+ * Top right: who is winning, buyers or sellers. The split is the volume of Coinbase trades whose
+ * aggressor bought (took an ask) vs sold (hit a bid), over the last bar's length of the chart.
  */
-export function FlowPill({ product, span }: { product: string; span: FlowWindow }) {
-  const flow = useOrderFlow(product, span)
+export function FlowPill({ product, interval }: { product: string; interval: string }) {
+  const seconds = flowSeconds(interval)
+  const flow = useOrderFlow(product, seconds)
   const up = flow?.buyPct ?? null
   const coin = product.split('-')[0]
   const lead = up === null ? '' : up > 50 ? ' is-buyers' : up < 50 ? ' is-sellers' : ''
@@ -42,25 +74,12 @@ export function FlowPill({ product, span }: { product: string; span: FlowWindow 
       role="status"
       aria-label={
         flow && up !== null
-          ? `Last ${flowWindowText(span)}: buyers ${pct(up)} (${flow.buy.toFixed(3)} ${coin}), sellers ${pct(100 - up)} (${flow.sell.toFixed(3)} ${coin})${flow.complete ? '' : ', still reading the start of the window'}`
+          ? `Last ${span(seconds)}: buyers ${pct(up)} (${flow.buy.toFixed(3)} ${coin}), sellers ${pct(100 - up)} (${flow.sell.toFixed(3)} ${coin})${flow.complete ? '' : ', still reading the start of it'}`
           : 'Buyers and sellers: no trades yet'
       }
     >
       <span className="phone-flow-up">▲ {up !== null ? pct(up) : '–'}</span>
       <span className="phone-flow-down">▼ {up !== null ? pct(100 - up) : '–'}</span>
-    </div>
-  )
-}
-
-/** Right of the quick-trade button: the window the buyers / sellers split is taken over. */
-export function FlowWindows({ span, onChange }: { span: FlowWindow; onChange: (w: FlowWindow) => void }) {
-  return (
-    <div className="phone-flow-windows" role="radiogroup" aria-label="Buyers and sellers over the last">
-      {FLOW_WINDOWS.map((w) => (
-        <button key={w} type="button" role="radio" aria-checked={span === w} className={span === w ? 'is-on' : ''} onClick={() => onChange(w)}>
-          {flowWindowText(w)}
-        </button>
-      ))}
     </div>
   )
 }

@@ -10,12 +10,7 @@ import { useEffect, useState } from 'react'
 import { fetchTrades } from './coinbase'
 import { feed } from './socket'
 
-/** The windows, in seconds. */
-export const FLOW_WINDOWS = [30, 60, 180, 300, 900] as const
-export type FlowWindow = (typeof FLOW_WINDOWS)[number]
-export const flowWindowText = (sec: number) => (sec < 60 ? `${sec}s` : `${sec / 60}m`)
-
-/** Trades older than the longest window (and a minute) are dropped. */
+/** Trades older than the longest window, 15 minutes (and a minute), are dropped. */
 const KEEP_SEC = 900 + 60
 /** At most this many pages of history for one window (BTC trades a few thousand times in 15 min). */
 const MAX_PAGES = 40

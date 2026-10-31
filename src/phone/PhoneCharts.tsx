@@ -16,8 +16,8 @@ import { defaults, SCALE_FIT_DEFAULTS, type ChartState, type Settings } from '..
 import { phoneFetch, PhoneRequestError } from './auth'
 import { HistoryIcon, PhoneHistory } from './PhoneHistory'
 import { IndicatorsIcon, PhoneIndicatorSheet, usePhoneIndicators } from './PhoneIndicators'
-import { FlowPill, FlowWindows, useFlowWindow } from './PhoneFlow'
-import { NextRoundSheet, NextRoundTimer } from './PhoneNextRound'
+import { FlowPill, TimingPicker, usePhoneTiming } from './PhoneFlow'
+import { KalshiOdds, NextRoundSheet, NextRoundTimer } from './PhoneNextRound'
 import { PhoneQuickTrade } from './PhoneQuickTrade'
 import { useTrade, type Trade } from './useTrade'
 
@@ -131,17 +131,17 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
   // The phone's own indicators on every tab, once it has saved some; the desktop chart's until then.
   const mine = usePhoneIndicators(onSignedOut)
   const [editing, setEditing] = useState(false)
+  // The phone's own timing (right of the quick-trade button): the chart and every indicator on it.
+  const [timing, setTiming] = usePhoneTiming()
   const chart = useMemo(
-    () => (desktopChart && mine.list ? { ...desktopChart, indicators: mine.list } : desktopChart),
-    [desktopChart, mine.list],
+    () => (desktopChart ? { ...desktopChart, ...(mine.list ? { indicators: mine.list } : {}), ...(timing ? { interval: timing } : {}) } : null),
+    [desktopChart, mine.list, timing],
   )
   const trade = useTrade(chart?.symbol ?? 'BTC-USD')
   // The quick-trade circles are showing.
   const [quick, setQuick] = useState(false)
   // The Next round sheet, opened from the timer beside the quick-trade button.
   const [nextRound, setNextRound] = useState(false)
-  // Buyers vs sellers, left of the timer, over the window picked right of the quick-trade button.
-  const [flowSpan, setFlowSpan] = useFlowWindow()
 
   // Two screens side by side (scroll snapping): History, and Charts where the page opens.
   const lanesRef = useRef<HTMLDivElement>(null)
@@ -209,7 +209,15 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
           {desktop && desktop.charts.length > 1 && (
             <nav className="phone-tabs">
               {desktop.charts.map((c, k) => (
-                <button key={k} className={k === index ? 'on' : undefined} onClick={() => setPicked(k)}>
+                <button
+                  key={k}
+                  className={k === index ? 'on' : undefined}
+                  onClick={() => {
+                    // A tab is the desktop chart as it is: its own interval again.
+                    setPicked(k)
+                    setTiming(null)
+                  }}
+                >
                   {c.symbol.split('-')[0]} · {intervalLabel(c.interval)}
                 </button>
               ))}
@@ -217,7 +225,7 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
           )}
           {problem && <div className="phone-problem">{problem}</div>}
           {chart && desktop && (mine.ready || mine.problem) ? (
-            <ChartCards key={index} chart={chart} scaleFit={desktop.scaleFit} drawings={desktop.drawings[chart.symbol]} />
+            <ChartCards key={`${index}:${chart.interval}`} chart={chart} scaleFit={desktop.scaleFit} drawings={desktop.drawings[chart.symbol]} />
           ) : (
             !problem && <div className="phone-wait">Reading the desktop's chart…</div>
           )}
@@ -237,8 +245,9 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
       {quick && chart && lane === 'charts' && <PhoneQuickTrade trade={trade} />}
       {chart && lane === 'charts' && (
         <>
-          <FlowPill product={chart.symbol} span={flowSpan} />
-          <FlowWindows span={flowSpan} onChange={setFlowSpan} />
+          <FlowPill product={chart.symbol} interval={chart.interval} />
+          <KalshiOdds trade={trade} />
+          <TimingPicker interval={chart.interval} onChange={setTiming} />
         </>
       )}
       {chart && lane === 'charts' && <NextRoundTimer trade={trade} open={nextRound} onToggle={() => setNextRound(!nextRound)} />}
@@ -439,7 +448,7 @@ function useCloseOnTapOutside(active: boolean, close: () => void) {
   useEffect(() => {
     if (!active) return
     let down: { x: number; y: number; id: number } | null = null
-    const inside = (target: EventTarget | null) => target instanceof Element && !!target.closest('.phone-tile, .phone-quick, .phone-quick-toggle, .phone-next-timer, .phone-flow-windows, .phone-quick-pad-back')
+    const inside = (target: EventTarget | null) => target instanceof Element && !!target.closest('.phone-tile, .phone-quick, .phone-quick-toggle, .phone-next-timer, .phone-timings, .phone-quick-pad-back')
     const onDown = (e: PointerEvent) => {
       down = e.isPrimary && !inside(e.target) ? { x: e.clientX, y: e.clientY, id: e.pointerId } : null
     }
