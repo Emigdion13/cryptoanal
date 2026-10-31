@@ -18,7 +18,7 @@ import { HistoryIcon, PhoneHistory } from './PhoneHistory'
 import { IndicatorsIcon, PhoneIndicatorSheet, usePhoneIndicators } from './PhoneIndicators'
 import { FlowPill, TimingPicker, usePhoneTiming } from './PhoneFlow'
 import { KalshiOdds, NextRoundSheet, NextRoundTimer } from './PhoneNextRound'
-import { PhoneQuickTrade } from './PhoneQuickTrade'
+import { HoldingColumn, PhoneQuickTrade } from './PhoneQuickTrade'
 import { useTrade, type Trade } from './useTrade'
 
 /** How often the phone rereads the desktop's workspace, to follow its symbol, interval and indicators. */
@@ -246,6 +246,7 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
       {chart && lane === 'charts' && (
         <>
           <FlowPill product={chart.symbol} interval={chart.interval} />
+          <HoldingColumn trade={trade} />
           <KalshiOdds trade={trade} />
           <TimingPicker interval={chart.interval} onChange={setTiming} />
         </>
@@ -448,7 +449,7 @@ function useCloseOnTapOutside(active: boolean, close: () => void) {
   useEffect(() => {
     if (!active) return
     let down: { x: number; y: number; id: number } | null = null
-    const inside = (target: EventTarget | null) => target instanceof Element && !!target.closest('.phone-tile, .phone-quick, .phone-quick-toggle, .phone-next-timer, .phone-timings, .phone-quick-pad-back')
+    const inside = (target: EventTarget | null) => target instanceof Element && !!target.closest('.phone-tile, .phone-quick, .phone-quick-toggle, .phone-next-timer, .phone-timings, .phone-hold, .phone-quick-pad-back')
     const onDown = (e: PointerEvent) => {
       down = e.isPrimary && !inside(e.target) ? { x: e.clientX, y: e.clientY, id: e.pointerId } : null
     }

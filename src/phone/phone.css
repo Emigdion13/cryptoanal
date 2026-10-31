@@ -587,26 +587,81 @@ button.phone-account:active {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-/* What is held and the target, under the header (the header's badge says Demo or Live). */
-.phone-quick-hold {
-  top: calc(env(safe-area-inset-top) + 58px);
+/* What is held: a column of blocks on the right, under the buyers / sellers split (phone-flow),
+   open or closed. Only the auto-sell block takes taps; the chart is reachable around the rest. */
+.phone-hold {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 156px);
+  right: 8px;
+  z-index: 14;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 148px;
+  pointer-events: none;
 }
-/* The auto-sell: under what is held, or under the target when there is one. */
-.phone-quick-auto {
-  top: calc(env(safe-area-inset-top) + 92px);
+.phone-hold-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 9px;
+  border: 1px solid var(--phone-line);
+  border-radius: 10px;
+  background: rgba(21, 26, 33, 0.94);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  color: var(--phone-text);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+.phone-hold-block small {
+  color: var(--phone-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.phone-hold-block b {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.phone-hold-block.is-up {
+  border-color: rgba(43, 185, 155, 0.6);
+}
+.phone-hold-block.is-up b {
+  color: #4fe0c0;
+}
+.phone-hold-block.is-down {
+  border-color: rgba(237, 103, 115, 0.6);
+}
+.phone-hold-block.is-down b {
+  color: #ff8a94;
+}
+.phone-hold-block.is-target {
+  border-color: rgba(106, 176, 255, 0.5);
+}
+.phone-hold-block.is-target b {
+  color: #6ab0ff;
+}
+.phone-hold-block.is-auto {
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.phone-hold-block.is-auto b {
   color: var(--phone-muted);
 }
-.phone-quick-auto.is-low {
-  top: calc(env(safe-area-inset-top) + 126px);
-}
-.phone-quick-auto.is-on {
+.phone-hold-block.is-auto.is-on {
   border-color: rgba(240, 180, 41, 0.55);
+}
+.phone-hold-block.is-auto.is-on b {
   color: #f0b429;
 }
-.phone-quick-plan {
-  top: calc(env(safe-area-inset-top) + 92px);
-  border-color: rgba(106, 176, 255, 0.5);
-  color: #6ab0ff;
+.phone-hold-block.is-auto:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.phone-hold-block.is-auto:disabled {
+  opacity: 0.5;
 }
 .phone-quick-note {
   bottom: calc(100% / 3 + 8px);

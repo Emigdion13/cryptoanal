@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { formatCents, sellNowBreakdown, sellNowResult, type TradeOutcome, type TradeTarget } from '../trade/kalshiTrade'
+import { formatCents, netProfitDollars, sellNowBreakdown, sellNowResult, type TradeOutcome, type TradeTarget } from '../trade/kalshiTrade'
 import {
   QUICK_DOLLARS,
   QUICK_AUTO_SELL_UNDER_PCT,
@@ -34,6 +34,7 @@ const count = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2))
  * EVERYTHING once buyers pay it: the computer watches the book and sells right away to the best
  * buyers, never under the target. Tapping another moves it; tapping it again cancels it. Hide under
  * each column hides it. Only the button at the bottom middle (an X while they show) closes them.
+ * What is held shows in HoldingColumn, open or closed.
  */
 export function PhoneQuickTrade({ trade }: { trade: Trade }) {
   const { state, busy, armed, status, send } = trade
@@ -55,7 +56,6 @@ export function PhoneQuickTrade({ trade }: { trade: Trade }) {
 
   let left: ReactNode = null
   let right: ReactNode = null
-  let pills: ReactNode = null
   let padHint = ''
   const buying = !held || !market || buyMore
   // Holding: Buy more (over the targets) and Targets (over the buy circles) switch.
@@ -134,10 +134,7 @@ export function PhoneQuickTrade({ trade }: { trade: Trade }) {
     const entry = held.avgMills ?? 0
     const targets = quickTargets(entry, bid, held.contracts, market)
     const mine = quickPlan(state?.targets ?? [], market.ticker)
-    const auto = quickAutoSell(state?.targets ?? [], market.ticker)
     const floor = quickSellFloor(bid, market)
-    // What selling it all at the bid now leaves in the cash: the move less the buy's and the sale's fee.
-    const sold = bid !== null ? sellNowResult(held.contracts, entry, bid, market.feeMultiplier) : null
 
     if (!buying) {
       const circle = (t: QuickTarget, key = `qt${t.pct}`) => {
@@ -195,40 +192,6 @@ export function PhoneQuickTrade({ trade }: { trade: Trade }) {
         </>
       )
     }
-    const myTarget = mine ? targets.find((t) => t.mills === mine.topMills) : undefined
-    pills = (
-      <>
-        <div className="phone-quick-pill phone-quick-hold">
-          {word(held.outcome)} {count(held.contracts)} @ {formatCents(entry)} · bid {formatCents(bid)}
-          {sold !== null ? (
-            <>
-              {' · '}
-              <span className={`phone-quick-money ${tone(sold.netDollars)}`} title={sellNowBreakdown(sold)}>
-                {money(sold.netDollars)}
-              </span>{' '}
-              after fees
-            </>
-          ) : null}
-        </div>
-        {mine ? (
-          <div className="phone-quick-pill phone-quick-plan">
-            {mine.state === 'selling' ? mine.message : `Sell all at ${formatCents(mine.topMills)} or more`}
-            {mine.state !== 'selling' && myTarget?.netDollars != null ? ` · ${money(myTarget.netDollars)}` : ''}
-          </div>
-        ) : null}
-        {/* The sell every buy queues on Kalshi: a tap takes it off for this round, or queues it again. */}
-        <button
-          type="button"
-          className={`phone-quick-pill phone-quick-auto${auto ? ' is-on' : ''}${mine ? ' is-low' : ''}`}
-          disabled={off}
-          onClick={() =>
-            void (auto ? send('qauto', 'target/cancel', { id: auto.id }, { confirm: false }) : send('qauto', 'auto-sell', { ticker: market.ticker }, { confirm: false }))
-          }
-        >
-          {busy === 'qauto' ? '…' : auto ? autoSellText(auto) : `Auto-sell (max profit −${QUICK_AUTO_SELL_UNDER_PCT}%): off · tap to queue`}
-        </button>
-      </>
-    )
   }
 
   // Under the circles: the last tap's answer; else, while trading is off, why (no key, connecting).
@@ -247,7 +210,6 @@ export function PhoneQuickTrade({ trade }: { trade: Trade }) {
 
   return (
     <div className="phone-quick">
-      {pills}
       {column('left', left)}
       {column('right', right)}
       {status || setup ? (
@@ -268,11 +230,75 @@ export function PhoneQuickTrade({ trade }: { trade: Trade }) {
   )
 }
 
-/** "Auto-sell queued at 98.2¢ · +$3.64 (max profit −5%) ✕": the order resting on Kalshi. */
+/**
+ * What is held in the running round, as a column of blocks on the right under the buyers /
+ * sellers split: the holding, the bid, what selling now leaves after fees, the target and the
+ * auto-sell (a tap takes it off for this round, or queues it again). Shown while anything is held,
+ * with the quick-trade circles open or closed.
+ */
+export function HoldingColumn({ trade }: { trade: Trade }) {
+  const { state, busy, send } = trade
+  const market = state?.market ?? null
+  const position = state?.position ?? null
+  const held = position && position.avgMills !== null && position.contracts > 0 ? position : null
+  if (!held || !market) return null
+  const bid = held.outcome === 'up' ? market.upBid : market.downBid
+  const entry = held.avgMills ?? 0
+  const mine = quickPlan(state?.targets ?? [], market.ticker)
+  const auto = quickAutoSell(state?.targets ?? [], market.ticker)
+  // What selling it all at the bid now leaves in the cash: the move less the buy's and the sale's fee.
+  const sold = bid !== null ? sellNowResult(held.contracts, entry, bid, market.feeMultiplier) : null
+  // A target sells to the buyers there (a taker sale), at the target at least.
+  const targetMoney = mine ? netProfitDollars(held.contracts, entry, mine.topMills, market.feeMultiplier, market.makerFees, true) : null
+  const off = !state?.canTrade || !!busy
+
+  return (
+    <div className="phone-hold" aria-label="What you hold">
+      <div className={`phone-hold-block is-${held.outcome}`}>
+        <small>Holding</small>
+        <b>
+          {word(held.outcome)} {held.outcome === 'up' ? '▲' : '▼'} {count(held.contracts)} @ {formatCents(entry)}
+        </b>
+      </div>
+      <div className="phone-hold-block">
+        <small>Bid now</small>
+        <b>{formatCents(bid)}</b>
+      </div>
+      <div className="phone-hold-block" title={sold ? sellNowBreakdown(sold) : undefined}>
+        <small>Sold now, after fees</small>
+        <b className={sold ? `phone-quick-money ${tone(sold.netDollars)}` : ''}>{sold ? money(sold.netDollars) : '—'}</b>
+      </div>
+      {mine ? (
+        <div className="phone-hold-block is-target">
+          <small>Target</small>
+          <b>
+            {mine.state === 'selling'
+              ? mine.message
+              : `${formatCents(mine.topMills)}+${targetMoney !== null ? ` · ${money(targetMoney)}` : ''}`}
+          </b>
+        </div>
+      ) : null}
+      {/* The sell every buy queues on Kalshi: a tap takes it off for this round, or queues it again. */}
+      <button
+        type="button"
+        className={`phone-hold-block is-auto${auto ? ' is-on' : ''}`}
+        disabled={off}
+        onClick={() =>
+          void (auto ? send('qauto', 'target/cancel', { id: auto.id }, { confirm: false }) : send('qauto', 'auto-sell', { ticker: market.ticker }, { confirm: false }))
+        }
+      >
+        <small>Auto-sell · max profit −{auto?.underPct ?? QUICK_AUTO_SELL_UNDER_PCT}%</small>
+        <b>{busy === 'qauto' ? '…' : auto ? autoSellText(auto) : 'Off · tap to queue'}</b>
+      </button>
+    </div>
+  )
+}
+
+/** "98.2¢ · +$3.64 ✕": the auto-sell's order resting on Kalshi (a tap takes it off). */
 function autoSellText(auto: TradeTarget): string {
   if (!(auto.topMills > 0) || !auto.orderId) return `${auto.message} ✕`
   const made = auto.profitDollars != null ? ` · ${money(auto.profitDollars)}` : ''
-  return `Auto-sell queued at ${formatCents(auto.topMills)}${made} (max profit −${auto.underPct ?? QUICK_AUTO_SELL_UNDER_PCT}%) ✕`
+  return `${formatCents(auto.topMills)}${made} ✕`
 }
 
 /** The empty keypad circle: a tap opens the keypad. */
