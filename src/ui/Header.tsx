@@ -54,6 +54,8 @@ interface Props {
   onScaleFit: (scaleFit: ScaleFit) => void
   /** ⚙ → Phone access: the iPhone page's passcode and switch. */
   onPhoneAccess: () => void
+  /** ⚙ → Kalshi trading: the phone's trading keys and the real-money switch. */
+  onKalshiTrading: () => void
   onIndicators: () => void
   /** The active chart's oscillators, for the Floating menu. */
   floating: { id: string; title: string; open: boolean }[]
@@ -132,6 +134,7 @@ export function Header(props: Props) {
         scaleFit={props.scaleFit}
         onScaleFit={props.onScaleFit}
         onPhoneAccess={props.onPhoneAccess}
+        onKalshiTrading={props.onKalshiTrading}
       />
       <button className="tb-btn icon" onClick={props.onFullscreen} title="Fullscreen mode">
         <FullscreenIcon />
@@ -348,12 +351,14 @@ function StatusLineMenu({
   scaleFit,
   onScaleFit,
   onPhoneAccess,
+  onKalshiTrading,
 }: {
   value: StatusLine
   onChange: (v: StatusLine) => void
   scaleFit: ScaleFit
   onScaleFit: (v: ScaleFit) => void
   onPhoneAccess: () => void
+  onKalshiTrading: () => void
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -406,6 +411,15 @@ function StatusLineMenu({
             }}
           >
             <span className="menu-label">Phone access…</span>
+          </div>
+          <div
+            className="menu-item"
+            onClick={() => {
+              setOpen(false)
+              onKalshiTrading()
+            }}
+          >
+            <span className="menu-label">Kalshi trading…</span>
           </div>
         </div>
       )}

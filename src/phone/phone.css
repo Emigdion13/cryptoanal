@@ -122,6 +122,100 @@ body.phone-body {
 .phone-card.is-os {
   border-color: rgba(43, 185, 155, 0.6);
 }
+/* The indicators: tiles three to a row; the open one takes a whole row, under the row it was in
+   (dense: the tiles after it fill the gap it leaves). */
+.phone-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-flow: row dense;
+  gap: 8px;
+}
+.phone-tile.is-open {
+  grid-column: 1 / -1;
+  animation: phone-grow 0.18s ease-out;
+}
+@keyframes phone-grow {
+  from {
+    opacity: 0.5;
+    transform: scale(0.97);
+  }
+}
+.phone-tile:not(.is-open) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 8px 6px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.25s,
+    transform 0.1s;
+}
+.phone-tile:not(.is-open):active {
+  transform: scale(0.96);
+}
+/* A closed tile is tinted by its call, to be read from across the screen. */
+.phone-tile.is-bull:not(.is-open) {
+  border-color: rgba(43, 185, 155, 0.35);
+  background: linear-gradient(rgba(43, 185, 155, 0.07), rgba(43, 185, 155, 0.07)), var(--phone-card);
+}
+.phone-tile.is-bear:not(.is-open) {
+  border-color: rgba(237, 103, 115, 0.35);
+  background: linear-gradient(rgba(237, 103, 115, 0.07), rgba(237, 103, 115, 0.07)), var(--phone-card);
+}
+.phone-tile.is-os:not(.is-open) {
+  background: linear-gradient(rgba(43, 185, 155, 0.14), rgba(43, 185, 155, 0.14)), var(--phone-card);
+}
+.phone-tile.is-ob:not(.is-open) {
+  background: linear-gradient(rgba(237, 103, 115, 0.14), rgba(237, 103, 115, 0.14)), var(--phone-card);
+}
+.phone-tile-call {
+  display: -webkit-box;
+  min-height: 2.4em;
+  overflow: hidden;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.phone-tile-call.tone-bull {
+  color: var(--phone-up);
+}
+.phone-tile-call.tone-bear {
+  color: var(--phone-down);
+}
+.phone-tile-call.tone-ob {
+  color: #ff8a94;
+}
+.phone-tile-call.tone-os {
+  color: #4fe0c0;
+}
+.phone-tile-call.tone-flat {
+  color: var(--phone-muted);
+}
+.phone-tile-value {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.phone-tile svg {
+  display: block;
+  width: 100%;
+  height: 40px;
+  margin-top: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .phone-tile.is-open {
+    animation: none;
+  }
+}
+
 .phone-card-head {
   display: flex;
   align-items: center;
@@ -395,4 +489,488 @@ body.phone-body {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+}
+
+/* The account in the header: DEMO / LIVE (a tap switches), and the cash. */
+.phone-env {
+  flex: none;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+.phone-env.is-demo {
+  background: rgba(106, 176, 255, 0.16);
+  color: #6ab0ff;
+}
+.phone-env.is-live {
+  background: rgba(240, 180, 41, 0.2);
+  color: #f0b429;
+}
+button.phone-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  color: var(--phone-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+button.phone-account:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+/* Bottom middle: the bolt shows the quick-trade circles, the X it turns into hides them. It sits
+   between the circles' two columns. */
+.phone-quick-toggle {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 14px);
+  z-index: 16;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid rgba(240, 180, 41, 0.55);
+  border-radius: 50%;
+  background: #2b2412;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  color: #f0b429;
+  transform: translateX(-50%);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.1s,
+    background 0.15s;
+}
+.phone-quick-toggle:active {
+  transform: translateX(-50%) scale(0.92);
+}
+.phone-quick-toggle.is-on {
+  border-color: var(--phone-line);
+  background: #1c222b;
+  color: var(--phone-text);
+}
+
+/* V2's quick-trade circles: pinned over the cards, which scroll on underneath. No layer covers
+   the screen: only the circles and pills are there, and a finger between them reaches the chart. */
+.phone-quick {
+  --q: clamp(48px, calc((100vw - 16px - 10px * 3) / 4.6), 66px);
+  display: contents;
+  pointer-events: none;
+}
+.phone-quick-pill,
+.phone-quick-col {
+  z-index: 15;
+}
+.phone-quick button,
+.phone-quick-pad-back {
+  pointer-events: auto;
+}
+.phone-quick-pill {
+  position: fixed;
+  left: 50%;
+  max-width: calc(100vw - 24px);
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  overflow: hidden;
+  border: 1px solid var(--phone-line);
+  border-radius: 999px;
+  background: rgba(21, 26, 33, 0.94);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  color: var(--phone-text);
+  touch-action: manipulation;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* What is held and the target, under the header (the header's badge says Demo or Live). */
+.phone-quick-hold {
+  top: calc(env(safe-area-inset-top) + 58px);
+}
+/* The trailing sell: under what is held, or under the target when there is one. */
+.phone-quick-trail {
+  top: calc(env(safe-area-inset-top) + 92px);
+  color: var(--phone-muted);
+}
+.phone-quick-trail.is-low {
+  top: calc(env(safe-area-inset-top) + 126px);
+}
+.phone-quick-trail.is-on {
+  border-color: rgba(240, 180, 41, 0.55);
+  color: #f0b429;
+}
+.phone-quick-plan {
+  top: calc(env(safe-area-inset-top) + 92px);
+  border-color: rgba(106, 176, 255, 0.5);
+  color: #6ab0ff;
+}
+.phone-quick-note {
+  bottom: calc(100% / 3 + 8px);
+  white-space: normal;
+  text-align: center;
+  border-radius: 12px;
+}
+.phone-quick-note.is-ok {
+  border-color: rgba(43, 185, 155, 0.55);
+}
+.phone-quick-note.is-warn {
+  border-color: rgba(240, 180, 41, 0.55);
+}
+.phone-quick-note.is-error {
+  border-color: rgba(237, 103, 115, 0.6);
+  color: #ff8a94;
+}
+.phone-quick-money.is-win {
+  color: var(--phone-up);
+}
+.phone-quick-money.is-loss {
+  color: var(--phone-down);
+}
+
+.phone-quick-col {
+  position: fixed;
+  top: 66.67%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.phone-quick-col.is-left {
+  left: 8px;
+  align-items: flex-start;
+}
+.phone-quick-col.is-right {
+  right: 8px;
+  align-items: flex-end;
+}
+.phone-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, var(--q));
+  gap: 10px;
+}
+/* Sell now sits in the right column's outer corner, under +75%. */
+.phone-quick-circle.is-sell {
+  grid-column: 2;
+}
+.phone-quick-foot {
+  display: flex;
+  gap: 6px;
+}
+.phone-quick-hide,
+.phone-quick-mode {
+  padding: 5px 10px;
+  border: 1px solid var(--phone-line);
+  border-radius: 999px;
+  background: rgba(21, 26, 33, 0.94);
+  color: var(--phone-muted);
+  font-size: 11px;
+}
+.phone-quick-mode.is-buy {
+  border-color: rgba(43, 185, 155, 0.5);
+  color: var(--phone-up);
+}
+
+.phone-quick-circle {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: var(--q);
+  height: var(--q);
+  padding: 0;
+  border: 1px solid #2f3742;
+  border-radius: 50%;
+  background: #1c222b;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  color: var(--phone-text);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  touch-action: manipulation;
+  transition:
+    transform 0.08s,
+    opacity 0.15s;
+}
+.phone-quick-circle small {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+.phone-quick-circle:active:not(:disabled) {
+  transform: scale(0.93);
+}
+.phone-quick-circle:disabled {
+  opacity: 0.4;
+}
+.phone-quick-circle.is-up {
+  border-color: rgba(43, 185, 155, 0.55);
+  background: #10342c;
+  color: #4fe0c0;
+}
+.phone-quick-circle.is-down {
+  border-color: rgba(237, 103, 115, 0.55);
+  background: #3a1b22;
+  color: #ff8a94;
+}
+.phone-quick-circle.is-big {
+  opacity: 0.55;
+}
+.phone-quick-circle.is-big.is-on {
+  opacity: 1;
+  box-shadow:
+    0 0 0 2px currentColor,
+    0 4px 14px rgba(0, 0, 0, 0.5);
+}
+.phone-quick-circle.is-target {
+  border-color: #6ab0ff;
+  background: #12304f;
+  color: #6ab0ff;
+}
+.phone-quick-circle.is-armed {
+  border-color: #f0b429;
+  background: #3a2e10;
+  color: #f0b429;
+}
+.phone-quick-circle.is-keypad {
+  border-style: dashed;
+  color: var(--phone-muted);
+}
+.phone-quick-typed {
+  position: relative;
+}
+.phone-quick-typed-clear {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--phone-line);
+  border-radius: 50%;
+  background: var(--phone-card);
+  color: var(--phone-muted);
+}
+
+/* The keypad for a typed $ or %: a sheet at the bottom; a tap outside keeps the value. */
+.phone-quick-pad-back {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+.phone-quick-pad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+  padding: 18px 16px calc(env(safe-area-inset-bottom) + 14px);
+  border-top: 1px solid var(--phone-line);
+  border-radius: 18px 18px 0 0;
+  background: #1a2029;
+}
+.phone-quick-pad-value {
+  font-size: 30px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.phone-quick-pad-hint {
+  min-height: 16px;
+  color: var(--phone-muted);
+  font-size: 12px;
+  text-align: center;
+}
+.phone-quick-pad-keys {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+.phone-quick-pad-keys button {
+  display: grid;
+  place-items: center;
+  height: 52px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--phone-text);
+  font-size: 22px;
+}
+.phone-quick-pad-keys button:active {
+  background: rgba(255, 255, 255, 0.16);
+}
+.phone-quick-pad-done {
+  width: 100%;
+  margin-top: 4px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(43, 185, 155, 0.18);
+  color: var(--phone-up);
+  font-size: 15px;
+  font-weight: 600;
+}
+/* Room for the last card above the quick-trade button, and above the circles while they show. */
+.phone.is-charts {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 84px);
+}
+.phone.has-quick {
+  padding-bottom: 45vh;
+}
+
+/* Two screens side by side, one swipe apart: History, then Charts. Each scrolls on its own. */
+.phone-lanes {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.phone-lanes::-webkit-scrollbar {
+  display: none;
+}
+.phone-lane {
+  flex: 0 0 100%;
+  min-width: 0;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+/* A narrow phone keeps the header's buttons: the note goes first. */
+@media (max-width: 400px) {
+  .phone-head .phone-note {
+    display: none;
+  }
+}
+
+/* The History screen. */
+.phone-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 0;
+}
+.phone-history-periods {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--phone-card);
+}
+.phone-history-periods button {
+  flex: 1;
+  padding: 7px 0;
+  border-radius: 8px;
+  color: var(--phone-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.phone-history-periods button.on {
+  background: #2a313c;
+  color: var(--phone-text);
+}
+.phone-history-total {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.phone-history-total > b {
+  font-size: 30px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.phone-history-total > b.is-up,
+.phone-history-list b.is-up {
+  color: var(--phone-up);
+}
+.phone-history-total > b.is-down,
+.phone-history-list b.is-down {
+  color: var(--phone-down);
+}
+.phone-history-curve {
+  display: block;
+  width: 100%;
+  height: 70px;
+  margin-top: 6px;
+}
+.phone-history-curve polyline {
+  fill: none;
+  stroke: var(--phone-muted);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.phone-history-curve.is-up polyline {
+  stroke: var(--phone-up);
+}
+.phone-history-curve.is-down polyline {
+  stroke: var(--phone-down);
+}
+.phone-history-zero {
+  stroke: var(--phone-line);
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+.phone-history-note {
+  margin: 0;
+  font-size: 12px;
+  text-align: center;
+}
+.phone-history-list {
+  margin: 0;
+  padding: 0 12px;
+  list-style: none;
+}
+.phone-history-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 0;
+  border-top: 1px solid var(--phone-line-soft);
+  font-size: 13px;
+}
+.phone-history-list li:first-child {
+  border-top: 0;
+}
+.phone-history-when {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.phone-history-what {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.phone-history-list b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.phone-history-list b.is-open {
+  color: #f0b429;
+  font-weight: 400;
+}
+.phone-head .phone-env {
+  align-self: center;
+}
+.is-spinning {
+  animation: phone-spin 0.9s linear infinite;
+}
+@keyframes phone-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

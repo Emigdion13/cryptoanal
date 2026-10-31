@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cryptoanal-lab": {
+      "command": "npx",
+      "args": ["tsx", "server/lab/mcp.ts"]
+    }
+  }
+}

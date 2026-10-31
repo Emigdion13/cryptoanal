@@ -25,6 +25,7 @@ import { newChart, useSettings, type ChartState, type ChartWindowState, type Set
 import type { ChartWindowActions } from './ui/ChartWindow'
 import { newChartWindow } from './ui/chartWindows'
 import { PhoneAccessDialog } from './ui/PhoneAccessDialog'
+import { KalshiTradingDialog } from './ui/KalshiTradingDialog'
 import { LeftToolbar, RightToolbar } from './ui/Sidebars'
 import { SymbolSearch } from './ui/SymbolSearch'
 import { useWorkspace } from './ui/useWorkspace'
@@ -76,6 +77,7 @@ export function App() {
   const [intervalText, setIntervalText] = useState<string | null>(null)
   const [indicatorsFor, setIndicatorsFor] = useState<IndicatorTarget | null>(null)
   const [phoneOpen, setPhoneOpen] = useState(false)
+  const [tradingOpen, setTradingOpen] = useState(false)
   const [editing, setEditing] = useState<(IndicatorTarget & { id: string }) | null>(null)
 
   // Drawings: the tool the next clicks place, the drawing selected on one of the charts, and undo.
@@ -413,6 +415,7 @@ export function App() {
           scaleFit={settings.scaleFit}
           onScaleFit={(scaleFit) => update({ scaleFit })}
           onPhoneAccess={() => setPhoneOpen(true)}
+          onKalshiTrading={() => setTradingOpen(true)}
           saveControls={<LayoutControls ws={ws} />}
         />
         <LeftToolbar
@@ -553,6 +556,7 @@ export function App() {
           />
         )}
         {phoneOpen && <PhoneAccessDialog onClose={() => setPhoneOpen(false)} />}
+        {tradingOpen && <KalshiTradingDialog onClose={() => setTradingOpen(false)} />}
       </div>
     </DrawingsContext.Provider>
   )

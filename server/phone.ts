@@ -536,7 +536,7 @@ export async function tailscaleAddress(port: number): Promise<{ name: string | n
   return { name, url: null }
 }
 
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+export async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   let size = 0
   const chunks: Buffer[] = []
   for await (const chunk of req) {
@@ -553,10 +553,14 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   }
 }
 
+/** The only changes a signed-in phone may send: the quick-trade circles' orders (server/trade/api.ts). */
+export const PHONE_WRITES = new Set(['/api/trade/buy', '/api/trade/sell-now', '/api/trade/target', '/api/trade/target/cancel'])
+
 /**
  * `/api/phone/*` (the phone's sign-in, and the computer's Phone access settings), and the gate in
  * front of everything else for requests through Tailscale: the desktop page sends them to
- * phone.html, and any other /api/ request needs a signed-in phone and is read-only.
+ * phone.html, and any other /api/ request needs a signed-in phone and is read-only, except the
+ * quick-trade orders (`PHONE_WRITES`).
  */
 export function createPhoneApi(
   phone = new PhoneAccess(join(dirname(workspaceFile()), 'phone.json')),
@@ -673,7 +677,7 @@ export function createPhoneApi(
       if (!path.startsWith('/api/')) return false
       try {
         phone.guard(req)
-        if (req.method !== 'GET' && req.method !== 'HEAD') throw new PhoneError(403, 'The phone can only look, not change anything.', 'READ_ONLY')
+        if (req.method !== 'GET' && req.method !== 'HEAD' && !PHONE_WRITES.has(path)) throw new PhoneError(403, 'The phone can only look, not change anything.', 'READ_ONLY')
       } catch (error) {
         if (error instanceof PhoneError && error.code === 'READ_ONLY') log(`[phone] refused ${req.method} ${path}`)
         fail(res, error)

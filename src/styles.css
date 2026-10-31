@@ -2160,3 +2160,22 @@ button.cw-iv.on:hover {
   background: var(--hover);
   color: var(--down);
 }
+.kalshi-key {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kalshi-key-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.kalshi-key-error {
+  text-align: left;
+}
+.kalshi-key-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
