@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { formatCents, sellNowBreakdown, sellNowResult, type TradeOutcome, type TradeTarget } from '../trade/kalshiTrade'
 import {
   QUICK_DOLLARS,
-  QUICK_TRAIL_PCT,
+  QUICK_AUTO_SELL_UNDER_PCT,
   keypadNumber,
   keypadPress,
   quickBuy,
@@ -10,7 +10,7 @@ import {
   quickSellFloor,
   quickTarget,
   quickTargets,
-  quickTrail,
+  quickAutoSell,
   type QuickTarget,
 } from '../trade/quick'
 import type { Trade } from './useTrade'
@@ -134,7 +134,7 @@ export function PhoneQuickTrade({ trade }: { trade: Trade }) {
     const entry = held.avgMills ?? 0
     const targets = quickTargets(entry, bid, held.contracts, market)
     const mine = quickPlan(state?.targets ?? [], market.ticker)
-    const trail = quickTrail(state?.targets ?? [], market.ticker)
+    const auto = quickAutoSell(state?.targets ?? [], market.ticker)
     const floor = quickSellFloor(bid, market)
     // What selling it all at the bid now leaves in the cash: the move less the buy's and the sale's fee.
     const sold = bid !== null ? sellNowResult(held.contracts, entry, bid, market.feeMultiplier) : null
@@ -216,16 +216,16 @@ export function PhoneQuickTrade({ trade }: { trade: Trade }) {
             {mine.state !== 'selling' && myTarget?.netDollars != null ? ` · ${money(myTarget.netDollars)}` : ''}
           </div>
         ) : null}
-        {/* The trailing sell every buy starts: a tap turns it off for this round, or back on. */}
+        {/* The sell every buy queues on Kalshi: a tap takes it off for this round, or queues it again. */}
         <button
           type="button"
-          className={`phone-quick-pill phone-quick-trail${trail ? ' is-on' : ''}${mine ? ' is-low' : ''}`}
-          disabled={off || trail?.state === 'selling'}
+          className={`phone-quick-pill phone-quick-auto${auto ? ' is-on' : ''}${mine ? ' is-low' : ''}`}
+          disabled={off}
           onClick={() =>
-            void (trail ? send('qtrail', 'target/cancel', { id: trail.id }, { confirm: false }) : send('qtrail', 'trail', { ticker: market.ticker }, { confirm: false }))
+            void (auto ? send('qauto', 'target/cancel', { id: auto.id }, { confirm: false }) : send('qauto', 'auto-sell', { ticker: market.ticker }, { confirm: false }))
           }
         >
-          {busy === 'qtrail' ? '…' : trail ? trailText(trail) : `Auto-sell ${QUICK_TRAIL_PCT}% off the high: off · tap to turn on`}
+          {busy === 'qauto' ? '…' : auto ? autoSellText(auto) : `Auto-sell (max profit −${QUICK_AUTO_SELL_UNDER_PCT}%): off · tap to queue`}
         </button>
       </>
     )
@@ -268,13 +268,11 @@ export function PhoneQuickTrade({ trade }: { trade: Trade }) {
   )
 }
 
-/** "Auto-sell ≤ 79.8¢ · 5% off the 84¢ high · not under 62¢ ✕": when the trailing sell goes off. */
-function trailText(trail: TradeTarget): string {
-  if (trail.state === 'selling') return trail.message
-  const pct = trail.trailPct ?? QUICK_TRAIL_PCT
-  const high = trail.highMills ?? 0
-  const at = `Auto-sell ≤ ${formatCents(high * (1 - pct / 100))} · ${pct}% off the ${formatCents(high)} high`
-  return `${at}${trail.topMills > 0 ? ` · not under ${formatCents(trail.topMills)}` : ''} ✕`
+/** "Auto-sell queued at 98.2¢ · +$3.64 (max profit −5%) ✕": the order resting on Kalshi. */
+function autoSellText(auto: TradeTarget): string {
+  if (!(auto.topMills > 0) || !auto.orderId) return `${auto.message} ✕`
+  const made = auto.profitDollars != null ? ` · ${money(auto.profitDollars)}` : ''
+  return `Auto-sell queued at ${formatCents(auto.topMills)}${made} (max profit −${auto.underPct ?? QUICK_AUTO_SELL_UNDER_PCT}%) ✕`
 }
 
 /** The empty keypad circle: a tap opens the keypad. */

@@ -591,15 +591,15 @@ button.phone-account:active {
 .phone-quick-hold {
   top: calc(env(safe-area-inset-top) + 58px);
 }
-/* The trailing sell: under what is held, or under the target when there is one. */
-.phone-quick-trail {
+/* The auto-sell: under what is held, or under the target when there is one. */
+.phone-quick-auto {
   top: calc(env(safe-area-inset-top) + 92px);
   color: var(--phone-muted);
 }
-.phone-quick-trail.is-low {
+.phone-quick-auto.is-low {
   top: calc(env(safe-area-inset-top) + 126px);
 }
-.phone-quick-trail.is-on {
+.phone-quick-auto.is-on {
   border-color: rgba(240, 180, 41, 0.55);
   color: #f0b429;
 }

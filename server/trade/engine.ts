@@ -11,8 +11,9 @@
  * - Fills, positions and orders arrive on the same stream and refresh the holding at once.
  * - A target is checked on every change of the book, not on a timer: the moment buyers pay it,
  *   everything sells to them, never under the target.
- * - Every buy starts a trailing sell, checked the same way: it follows the highest bid since, and
- *   once buyers pay 5% under it, everything sells to them, never at a loss after fees.
+ * - Every buy queues a sell on Kalshi, resting, for everything held: at the price that makes the
+ *   most the buy can make (settling at $1) less 5%, after fees, and never at a loss. Each read of
+ *   the holding keeps it to exactly what is held.
  * - Every change is pushed to the phone (server-sent events), so its circles show what Kalshi shows.
  */
 import { readFileSync } from 'node:fs'
@@ -23,12 +24,13 @@ import {
   LiveBook,
   NOW_SLIPPAGE_MILLS,
   TAKER_FEE,
-  breakEvenMills,
+  autoSellMills,
   buyCostDollars,
   contractsFor,
   formatCents,
   isOutcome,
   millsToDollars,
+  netProfitDollars,
   newClientOrderId,
   onGrid,
   parseBalance,
@@ -45,7 +47,7 @@ import {
   snapUp,
   toTradeMarket,
   toV2Order,
-  trailFires,
+  TRADE_ORDER_PREFIX,
   type OrderIntent,
   type TradeEnv,
   type TradeMarket,
@@ -57,7 +59,7 @@ import {
   type TradeTarget,
 } from '../../src/trade/kalshiTrade'
 import { historyRounds, historyTotals, parseFills, parseSettlements, type TradeHistory } from '../../src/trade/history'
-import { QUICK_TRAIL_PCT } from '../../src/trade/quick'
+import { QUICK_AUTO_SELL_UNDER_PCT } from '../../src/trade/quick'
 import { KALSHI_SERIES } from '../kalshi'
 import { KalshiRest, KalshiStream, TradeError } from './kalshi'
 import type { KalshiKeyStore, ResolvedKeys } from './keys'
@@ -79,6 +81,10 @@ const SERIES_TTL_MS = 3_600_000
 const FUNDS_WAIT_MS = 8_000
 const FUNDS_POLL_MS = 400
 const MAX_DOLLARS = 5_000
+/** After a buy, its holding may take this long to show; the auto-sell waits for it. */
+const HOLDING_SHOWS_MS = 5_000
+/** A new resting order may take this long to be listed; until then it is not placed again. */
+const ORDER_SHOWS_MS = 3_000
 const TICK_MS = 500
 
 interface Feed {
@@ -125,6 +131,8 @@ interface Account {
   balanceLast: number
   /** Rounds with a sale in flight: one at a time, so a target and Sell now never both sell. */
   selling: Set<string>
+  /** Rounds whose auto-sell is being queued or moved, and the work doing it. */
+  queuing: Map<string, Promise<void>>
   accountNews: ReturnType<typeof setTimeout> | null
   /** Histories read, by period start; dropped when the account trades. */
   histories: Map<number, { at: number; promise: Promise<TradeHistory> }>
@@ -136,10 +144,16 @@ interface WorkingTarget extends TradeTarget {
   retryAt?: number
   /** When it started, ms: only holdings read after it count (before, a buy may not show yet). */
   startedAt?: number
+  /** When the auto-sell's order was sent, ms, until Kalshi lists it (then 0). */
+  placedAt?: number
 }
 
 /** What the phone and the file see of a working target: no server bookkeeping. */
-const shown = ({ product: _product, retryAt: _retryAt, startedAt: _startedAt, ...target }: WorkingTarget): TradeTarget => target
+const shown = ({ product: _product, retryAt: _retryAt, startedAt: _startedAt, placedAt: _placedAt, ...target }: WorkingTarget): TradeTarget => target
+
+/** The auto-sell's own orders on Kalshi. */
+const AUTO_SELL_ORDER = 'auto'
+const isAutoSellOrder = (order: TradeOrder) => order.clientOrderId.startsWith(`${TRADE_ORDER_PREFIX}${AUTO_SELL_ORDER}-`)
 
 const word = (outcome: TradeOutcome) => (outcome === 'up' ? 'Up' : 'Down')
 const count$ = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2))
@@ -160,8 +174,6 @@ export class TradeEngine {
   private series = new Map<string, { multiplier: number; makerFees: boolean; at: number }>()
   private targets = new Map<string, WorkingTarget>()
   private targetsDone: TradeTarget[] = []
-  /** A trailing sell's high moved since the file was written (saved on the next tick). */
-  private highsMoved = false
   private listeners = new Set<(env: TradeEnv) => void>()
   private timer: ReturnType<typeof setInterval> | null = null
   private saving: Promise<void> = Promise.resolve()
@@ -185,6 +197,7 @@ export class TradeEngine {
       balanceLoad: null,
       balanceLast: 0,
       selling: new Set(),
+      queuing: new Map(),
       accountNews: null,
       histories: new Map(),
     })
@@ -254,15 +267,11 @@ export class TradeEngine {
         this.finishTarget(
           target,
           'ended',
-          target.kind === 'trail'
-            ? 'The round ended without the trailing sell going off: what is held settles at $1 or $0.'
+          target.kind === 'auto-sell'
+            ? `The round ended with the auto-sell at ${formatCents(target.topMills)} not filled: what is held settles at $1 or $0.`
             : `The round ended with the target at ${formatCents(target.topMills)} not reached: what is held settles at $1 or $0.`,
         )
       else this.feed(this.accounts[target.env], target.product).wantedAt = now
-    }
-    if (this.highsMoved) {
-      this.highsMoved = false
-      this.saveTargets()
     }
     let active = false
     for (const acc of Object.values(this.accounts)) {
@@ -453,6 +462,7 @@ export class TradeEngine {
       ])
       const portfolio = { position: parsePosition(positions, ticker), orders: parseOrders(orders), at }
       acc.portfolios.set(ticker, portfolio)
+      this.keepAutoSell(acc, ticker, portfolio)
       return portfolio
     })().finally(() => {
       acc.portfolioLoads.delete(ticker)
@@ -601,7 +611,7 @@ export class TradeEngine {
       if (!moved) throw error
       result = await this.submit(acc, { ...intent, clientOrderId: newClientOrderId('buy') })
     }
-    if ((result.filled ?? 0) > 0) this.startTrail(acc, feed, market, outcome)
+    if ((result.filled ?? 0) > 0) this.startAutoSell(acc, feed, market, outcome)
     this.afterOrder(acc, market.ticker)
     return { ...result, message: moved ? `Moved $${moved.toFixed(2)} to the crypto exchange · ${result.message}` : result.message, ms: Date.now() - started }
   }
@@ -618,6 +628,7 @@ export class TradeEngine {
     if (acc.selling.has(market.ticker)) throw new TradeError(409, 'A sale is already going out. One moment.', 'BUSY')
     acc.selling.add(market.ticker)
     try {
+      await acc.queuing.get(market.ticker)
       const held = acc.portfolios.get(market.ticker)
       const portfolio = held?.position && Date.now() - held.at < (acc.stream?.open ? 10_000 : 1_500) ? held : await this.refreshPortfolio(acc, market.ticker)
       const position = portfolio.position
@@ -647,8 +658,10 @@ export class TradeEngine {
       })
       if ((result.filled ?? 0) >= position.contracts - 1e-9)
         for (const target of [...this.targets.values()]) if (target.env === env && target.ticker === market.ticker) this.finishTarget(target, 'canceled', 'Sold everything with Sell now')
-      if (!(result.filled ?? 0) && canceled.length) {
-        for (const order of canceled)
+      // The auto-sell is not put back by hand: the next read of the holding queues it again.
+      const back = canceled.filter((order) => !isAutoSellOrder(order))
+      if (!(result.filled ?? 0) && back.length) {
+        for (const order of back)
           await acc.rest.call('POST', '/portfolio/events/orders', {
             body: {
               ticker: market.ticker,
@@ -682,7 +695,7 @@ export class TradeEngine {
     if (typeof top !== 'number' || !onGrid(position.outcome, top, priceTicks(market.bands))) throw new TradeError(400, `${formatCents(Number(top))} is not a price this market takes.`, 'BAD_PRICE')
     if (position.avgMills !== null && top <= position.avgMills) throw new TradeError(400, `A target sells above the ${formatCents(position.avgMills)} you paid.`, 'BAD_PRICE')
     for (const old of [...this.targets.values()])
-      if (old.env === env && old.ticker === market.ticker && old.kind !== 'trail') {
+      if (old.env === env && old.ticker === market.ticker && old.kind !== 'auto-sell') {
         if (old.state === 'selling') throw new TradeError(409, 'The target is selling right now.', 'BUSY')
         this.finishTarget(old, 'canceled', `Moved to ${formatCents(top)}`)
       }
@@ -714,54 +727,144 @@ export class TradeEngine {
     const target = typeof raw.id === 'string' ? this.targets.get(raw.id) : undefined
     if (!target || target.env !== env) throw new TradeError(404, 'That target is already over.', 'NO_TARGET')
     if (target.state === 'selling') throw new TradeError(409, 'It is selling right now.', 'BUSY')
-    const message = target.kind === 'trail' ? 'Trailing sell off for this round' : 'Target canceled'
-    this.finishTarget(target, 'canceled', message)
-    return { ok: true, message }
+    if (target.kind !== 'auto-sell') {
+      this.finishTarget(target, 'canceled', 'Target canceled')
+      return { ok: true, message: 'Target canceled' }
+    }
+    // Off first here, so a read of the holding meanwhile does not queue it again; then off Kalshi.
+    const acc = this.accounts[env]
+    await acc.queuing.get(target.ticker)
+    this.finishTarget(target, 'canceled', 'Auto-sell off for this round')
+    const resting = (acc.portfolios.get(target.ticker)?.orders ?? []).filter(isAutoSellOrder).map((o) => o.orderId)
+    for (const id of new Set([...resting, ...(target.orderId ? [target.orderId] : [])])) await this.cancelOrder(acc, target.ticker, id).catch(() => undefined)
+    this.afterOrder(acc, target.ticker)
+    return { ok: true, message: 'Auto-sell off for this round' }
   }
 
-  /** Turn the trailing sell back on for what is held in this round (after it was turned off). */
-  async setTrail(env: TradeEnv, raw: Record<string, unknown>): Promise<TradeResult> {
+  /** Queue the auto-sell again for what is held in this round (after it was turned off). */
+  async setAutoSell(env: TradeEnv, raw: Record<string, unknown>): Promise<TradeResult> {
+    const started = Date.now()
     this.requireTrading(env)
     const { acc, feed, market } = await this.running(env, raw.ticker)
     const { position } = await this.refreshPortfolio(acc, market.ticker)
     if (!position) throw new TradeError(409, 'You hold nothing in this round.', 'NO_POSITION')
-    this.startTrail(acc, feed, market, position.outcome)
-    await this.checkTargets(acc, feed)
-    return { ok: true, message: `Trailing sell on: sells everything ${QUICK_TRAIL_PCT}% under the highest bid, never at a loss` }
+    this.startAutoSell(acc, feed, market, position.outcome)
+    // The first read sent after the start queues it (one already going out may not count).
+    const from = Date.now()
+    while ((await this.refreshPortfolio(acc, market.ticker)).at < from);
+    await acc.queuing.get(market.ticker)
+    const target = [...this.targets.values()].find((t) => t.env === env && t.ticker === market.ticker && t.kind === 'auto-sell')
+    const done = this.targetsDone.find((t) => t.kind === 'auto-sell' && t.ticker === market.ticker)
+    return { ok: true, message: target?.message ?? done?.message ?? 'Auto-sell on', ms: Date.now() - started }
   }
 
   /**
-   * Every buy starts a trailing sell on its round, from the bid now. One per round: buying more of
-   * the same side keeps the one working (its high, and a floor that follows the new average).
+   * Every buy starts the round's auto-sell; the read of the holding after it queues the order. One
+   * per round: buying more of the same side keeps it, and the next read moves it to the new
+   * holding.
    */
-  private startTrail(acc: Account, feed: Feed, market: TradeMarket, outcome: TradeOutcome): void {
+  private startAutoSell(acc: Account, feed: Feed, market: TradeMarket, outcome: TradeOutcome): void {
     for (const old of [...this.targets.values()])
-      if (old.env === acc.env && old.ticker === market.ticker && old.kind === 'trail') {
+      if (old.env === acc.env && old.ticker === market.ticker && old.kind === 'auto-sell') {
         if (old.outcome === outcome) return
         this.finishTarget(old, 'canceled', `Now holding ${word(outcome)}`)
+        if (old.orderId) void this.cancelOrder(acc, old.ticker, old.orderId).catch(() => undefined)
       }
-    const prices = feed.book.prices()
-    const trail: WorkingTarget = {
-      id: `r-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    const target: WorkingTarget = {
+      id: `a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
       env: acc.env,
       ticker: market.ticker,
       product: feed.product,
       outcome,
-      kind: 'trail',
-      trailPct: QUICK_TRAIL_PCT,
-      highMills: (outcome === 'up' ? prices.upBid : prices.downBid) ?? 0,
-      // The floor: read once the holding is.
+      kind: 'auto-sell',
+      underPct: QUICK_AUTO_SELL_UNDER_PCT,
+      // The price: set once the holding is read.
       topMills: 0,
       state: 'watching',
-      message: `Sells everything once buyers pay ${QUICK_TRAIL_PCT}% under the highest bid, never at a loss`,
+      message: 'Queuing the auto-sell…',
       soldContracts: 0,
       closesAt: market.close * 1000,
       startedAt: Date.now(),
     }
-    this.targets.set(trail.id, trail)
-    this.log(`[trade] ${acc.env} trailing sell ${QUICK_TRAIL_PCT}% on ${word(outcome)} ${market.ticker}`)
+    this.targets.set(target.id, target)
+    this.log(`[trade] ${acc.env} auto-sell on ${market.ticker}`)
     this.saveTargets()
     this.ensureTick()
+  }
+
+  /** Keep the round's auto-sell to what is held, after a read of the holding (one at a time). */
+  private keepAutoSell(acc: Account, ticker: string, portfolio: Portfolio): void {
+    if (acc.queuing.has(ticker)) return
+    const job = this.queueAutoSell(acc, ticker, portfolio).finally(() => {
+      if (acc.queuing.get(ticker) === job) acc.queuing.delete(ticker)
+    })
+    acc.queuing.set(ticker, job)
+  }
+
+  /**
+   * The auto-sell rests on Kalshi for exactly what is held: queued once the buy shows; queued again
+   * for the whole holding (priced at its new average) after a buy of more, a part sold elsewhere, or
+   * a sale that took it down; taken off once nothing is held, so it never sells what is not there.
+   */
+  private async queueAutoSell(acc: Account, ticker: string, portfolio: Portfolio): Promise<void> {
+    const target = [...this.targets.values()].find((t) => t.env === acc.env && t.ticker === ticker && t.kind === 'auto-sell' && t.state === 'watching')
+    const now = Date.now()
+    if (!target || portfolio.at < (target.startedAt ?? 0) || acc.selling.has(ticker) || (target.retryAt ?? 0) > now) return
+    const { position } = portfolio
+    const mine = portfolio.orders.filter(isAutoSellOrder)
+    const resting = mine.find((o) => o.orderId === target.orderId)
+    // Sent a moment ago and not listed yet: it may still be resting, or have filled at once.
+    if (resting) target.placedAt = 0
+    else if (target.orderId && now - (target.placedAt ?? 0) < ORDER_SHOWS_MS) return
+    try {
+      if (!position || position.outcome !== target.outcome) {
+        // Just bought: the holding may not show yet.
+        if (!target.orderId && now - (target.startedAt ?? 0) < HOLDING_SHOWS_MS) return
+        for (const order of mine) await this.cancelOrder(acc, ticker, order.orderId)
+        if (target.orderId && !resting) return this.finishTarget(target, 'done', `Auto-sell filled: sold at ${formatCents(target.topMills)} or more`)
+        return this.finishTarget(target, 'ended', 'Nothing held anymore; the auto-sell is off')
+      }
+      for (const order of mine) if (order !== resting) await this.cancelOrder(acc, ticker, order.orderId)
+      if (resting && Math.abs(resting.remaining - position.contracts) < 0.005) return
+      const market = acc.feeds.get(target.product)?.market
+      if (!market || market.ticker !== ticker || position.avgMills === null) return
+      const price = autoSellMills(position.contracts, position.avgMills, priceTicks(market.bands), market.feeMultiplier, market.makerFees, target.underPct)
+      if (resting) await this.cancelOrder(acc, ticker, resting.orderId)
+      target.orderId = undefined
+      if (price === null)
+        return this.finishTarget(target, 'ended', `No auto-sell: at ${formatCents(position.avgMills)} paid, no price under $1 makes money after fees`)
+      // Good till canceled, as Kalshi rests sells; kept to what is held, and taken off when nothing is.
+      target.placedAt = Date.now()
+      const intent: OrderIntent = {
+        ticker,
+        outcome: position.outcome,
+        action: 'sell',
+        mills: price,
+        count: position.contracts,
+        timeInForce: 'good_till_canceled',
+        clientOrderId: newClientOrderId(AUTO_SELL_ORDER),
+      }
+      const placed = (await acc.rest.call('POST', '/portfolio/events/orders', { body: toV2Order(intent) })) as Record<string, unknown> | null
+      if (this.targets.get(target.id) !== target) {
+        // Turned off while it went out.
+        if (typeof placed?.order_id === 'string') await this.cancelOrder(acc, ticker, placed.order_id).catch(() => undefined)
+        return
+      }
+      target.orderId = typeof placed?.order_id === 'string' ? placed.order_id : undefined
+      target.topMills = price
+      target.profitDollars = Math.round(netProfitDollars(position.contracts, position.avgMills, price, market.feeMultiplier, market.makerFees) * 100) / 100
+      target.message = `Sells all ${count$(position.contracts)} ${word(position.outcome)} at ${formatCents(price)}, resting on Kalshi`
+      this.log(`[trade] ${acc.env} auto-sell ${count$(position.contracts)} ${word(position.outcome)} @ ${formatCents(price)} ${ticker} (paid ${formatCents(position.avgMills)})`)
+      this.saveTargets()
+      this.afterOrder(acc, ticker)
+    } catch (error) {
+      if (this.targets.get(target.id) !== target) return
+      target.retryAt = Date.now() + 2_000
+      target.message = `Auto-sell: Kalshi did not take it (${error instanceof Error ? error.message : 'no answer'}); trying again`
+      this.log(`[trade] ${acc.env} ${target.message}`)
+    } finally {
+      this.notify(acc.env)
+    }
   }
 
   private checkTargets(acc: Account, feed: Feed): Promise<void> {
@@ -770,45 +873,26 @@ export class TradeEngine {
     if (!ticker || !feed.market) return Promise.resolve()
     const prices = feed.book.prices()
     for (const target of this.targets.values()) {
-      if (target.env !== acc.env || target.ticker !== ticker || target.state !== 'watching') continue
+      // The auto-sell rests on Kalshi: Kalshi fills it.
+      if (target.env !== acc.env || target.ticker !== ticker || target.state !== 'watching' || target.kind === 'auto-sell') continue
+      if ((target.retryAt ?? 0) > Date.now() || acc.selling.has(ticker) || acc.queuing.has(ticker)) continue
       const bid = target.outcome === 'up' ? prices.upBid : prices.downBid
-      if (target.kind === 'trail' && bid !== null && bid > (target.highMills ?? 0)) {
-        target.highMills = bid
-        this.highsMoved = true
-      }
-      if ((target.retryAt ?? 0) > Date.now() || acc.selling.has(ticker)) continue
-      if (target.kind !== 'trail') {
-        if (bid !== null && bid >= target.topMills) sales.push(this.fireTarget(acc, feed, target))
-        continue
-      }
-      // The floor follows the holding (a buy of more moves its average), read after the trail began.
-      const held = acc.portfolios.get(ticker)
-      const position = held && held.at >= (target.startedAt ?? 0) ? held.position : null
-      if (!position || position.outcome !== target.outcome || position.avgMills === null) continue
-      const floor = breakEvenMills(position.contracts, position.avgMills, priceTicks(feed.market.bands), feed.market.feeMultiplier)
-      if ((floor ?? 0) !== target.topMills) {
-        target.topMills = floor ?? 0
-        this.highsMoved = true
-      }
-      if (trailFires(bid, target.highMills ?? 0, floor, target.trailPct ?? QUICK_TRAIL_PCT)) sales.push(this.fireTarget(acc, feed, target))
+      if (bid !== null && bid >= target.topMills) sales.push(this.fireTarget(acc, feed, target))
     }
     return Promise.all(sales).then(() => undefined)
   }
 
   private async fireTarget(acc: Account, feed: Feed, target: WorkingTarget): Promise<void> {
-    const trail = target.kind === 'trail'
-    const what = trail ? 'Trailing sell' : `Target ${formatCents(target.topMills)}`
+    const what = `Target ${formatCents(target.topMills)}`
     target.state = 'selling'
-    target.message = trail
-      ? `Buyers came ${target.trailPct ?? QUICK_TRAIL_PCT}% off the ${formatCents(target.highMills)} high: selling everything at ${formatCents(target.topMills)} or more`
-      : `Buyers reached ${formatCents(target.topMills)}: selling everything`
+    target.message = `Buyers reached ${formatCents(target.topMills)}: selling everything`
     acc.selling.add(target.ticker)
     this.notify(acc.env)
     try {
       const held = acc.portfolios.get(target.ticker)
       const portfolio = held?.position && Date.now() - held.at < 3_000 ? held : await this.refreshPortfolio(acc, target.ticker)
       const position = portfolio.position
-      if (!position || position.outcome !== target.outcome) return this.finishTarget(target, 'ended', `Nothing held anymore; the ${trail ? 'trailing sell' : 'target'} stopped`)
+      if (!position || position.outcome !== target.outcome) return this.finishTarget(target, 'ended', 'Nothing held anymore; the target stopped')
       for (const order of portfolio.orders) if (reducesPosition(order, position)) await this.cancelOrder(acc, target.ticker, order.orderId).catch(() => undefined)
       const ticks = priceTicks(feed.market?.bands ?? [])
       const price = onGrid(target.outcome, target.topMills, ticks) ? target.topMills : (snapUp(target.topMills, ticks) ?? target.topMills)
@@ -827,16 +911,15 @@ export class TradeEngine {
       const left = Math.max(0, Math.round((position.contracts - (result.filled ?? 0)) * 100) / 100)
       this.afterOrder(acc, target.ticker)
       if (left <= 0) {
-        const sold = `sold ${count$(target.soldContracts)} ${word(target.outcome)}${result.avgFillMills != null ? ` at ${formatCents(result.avgFillMills)} avg` : ''}`
-        this.finishTarget(target, 'done', trail ? `Trailing sell: ${sold}, ${target.trailPct ?? QUICK_TRAIL_PCT}% off the ${formatCents(target.highMills)} high` : `${what} reached: ${sold}`)
-        // Nothing is held: the round's other target or trailing sell has nothing left to do.
+        this.finishTarget(target, 'done', `${what} reached: sold ${count$(target.soldContracts)} ${word(target.outcome)}${result.avgFillMills != null ? ` at ${formatCents(result.avgFillMills)} avg` : ''}`)
+        // Nothing is held: the round's auto-sell has nothing left to do.
         for (const other of [...this.targets.values()])
-          if (other.env === target.env && other.ticker === target.ticker) this.finishTarget(other, 'canceled', `Everything sold by the ${trail ? 'trailing sell' : 'target'}`)
+          if (other.env === target.env && other.ticker === target.ticker) this.finishTarget(other, 'canceled', 'Everything sold by the target')
         return
       }
       target.state = 'watching'
       target.retryAt = Date.now() + 300
-      target.message = `${what}: ${target.soldContracts ? `sold ${count$(target.soldContracts)}, ` : ''}${count$(left)} still held; sells the rest once buyers pay ${trail ? 'enough' : 'it'} again`
+      target.message = `${what}: ${target.soldContracts ? `sold ${count$(target.soldContracts)}, ` : ''}${count$(left)} still held; sells the rest once buyers pay it again`
       this.saveTargets()
     } catch (error) {
       if (this.targets.get(target.id) !== target) return
@@ -849,7 +932,7 @@ export class TradeEngine {
     }
   }
 
-  /** A working target whose holding is gone (sold elsewhere, or settled) stops. */
+  /** A working target whose holding is gone (sold elsewhere, or settled) stops; the auto-sell sees to itself. */
   private checkHeld(acc: Account, ticker: string): void {
     const held = acc.portfolios.get(ticker)
     if (!held || Date.now() - held.at > 6_000) return
@@ -857,11 +940,12 @@ export class TradeEngine {
       if (
         target.env === acc.env &&
         target.ticker === ticker &&
+        target.kind !== 'auto-sell' &&
         target.state === 'watching' &&
         held.at >= (target.startedAt ?? 0) &&
         (!held.position || held.position.outcome !== target.outcome)
       )
-        this.finishTarget(target, 'ended', `Nothing held anymore (sold elsewhere); the ${target.kind === 'trail' ? 'trailing sell' : 'target'} stopped`)
+        this.finishTarget(target, 'ended', 'Nothing held anymore (sold elsewhere); the target stopped')
   }
 
   private finishTarget(target: WorkingTarget, state: TradeTarget['state'], message: string): void {
@@ -894,7 +978,7 @@ export class TradeEngine {
     try {
       const saved = JSON.parse(readFileSync(this.targetsFile, 'utf8')) as { targets?: unknown }
       for (const t of Array.isArray(saved.targets) ? (saved.targets as WorkingTarget[]) : [])
-        if (t && typeof t.id === 'string' && (t.env === 'demo' || t.env === 'live') && typeof t.product === 'string' && KALSHI_SERIES[t.product] && t.closesAt > Date.now())
+        if (t && typeof t.id === 'string' && (t.env === 'demo' || t.env === 'live') && typeof t.product === 'string' && KALSHI_SERIES[t.product] && t.closesAt > Date.now() && (t.kind === undefined || t.kind === 'target' || t.kind === 'auto-sell'))
           this.targets.set(t.id, { ...t, state: 'watching' })
     } catch {
       // No saved targets.

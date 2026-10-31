@@ -3,7 +3,7 @@ import {
   LiveBook,
   TAKER_FEE,
   TAPERED_BANDS,
-  breakEvenMills,
+  autoSellMills,
   buyCostDollars,
   contractsFor,
   feeDollars,
@@ -25,11 +25,10 @@ import {
   targetForPercent,
   toTradeMarket,
   toV2Order,
-  trailFires,
   type TradeMarket,
   type TradeTarget,
 } from './kalshiTrade'
-import { keypadNumber, keypadPress, quickBuy, quickPlan, quickSellFloor, quickTarget, quickTargets, quickTrail } from './quick'
+import { keypadNumber, keypadPress, quickBuy, quickPlan, quickSellFloor, quickTarget, quickTargets, quickAutoSell } from './quick'
 
 const TICKS = priceTicks(TAPERED_BANDS)
 
@@ -275,28 +274,28 @@ describe('quick circles', () => {
   })
 })
 
-describe('the trailing sell', () => {
-  it('finds the lowest price that loses nothing after both fees', () => {
-    // 15 bought at 62¢: 65¢ still loses a little to the fees, 66¢ does not.
-    expect(breakEvenMills(15, 620, TICKS)).toBe(660)
-    expect(netProfitDollars(15, 620, 650, 1, true, true)).toBeLessThan(0)
-    expect(netProfitDollars(15, 620, 660, 1, true, true)).toBeGreaterThanOrEqual(0)
-    expect(breakEvenMills(15, 999, TICKS)).toBeNull()
+describe('the auto-sell every buy queues', () => {
+  it('sells at the most the buy can make less 5%, after both fees', () => {
+    // 10 at 60¢ can make $3.83 (settling at $1, the buy's fee paid); 5% less is $3.64: 98.2¢.
+    expect(netProfitDollars(10, 600, 1000)).toBeCloseTo(3.832, 4)
+    expect(autoSellMills(10, 600, TICKS)).toBe(982)
+    expect(netProfitDollars(10, 600, 981)).toBeLessThan(3.832 * 0.95)
+    expect(netProfitDollars(10, 600, 982)).toBeGreaterThanOrEqual(3.832 * 0.95)
+    // A cheaper buy can make more, so its 5% is more: 10 at 20¢ sells at 96.2¢.
+    expect(autoSellMills(10, 200, TICKS)).toBe(962)
   })
 
-  it('goes off 5% under the high, never under the floor', () => {
-    expect(trailFires(760, 800, 660, 5)).toBe(true)
-    expect(trailFires(761, 800, 660, 5)).toBe(false)
-    expect(trailFires(600, 640, 660, 5)).toBe(false)
-    expect(trailFires(760, 800, null, 5)).toBe(false)
-    expect(trailFires(null, 800, 660, 5)).toBe(false)
+  it('takes the top of the grid when no price makes 95%, and never sells at a loss', () => {
+    expect(autoSellMills(10, 980, TICKS)).toBe(999)
+    expect(netProfitDollars(10, 980, 999)).toBeGreaterThan(0)
+    expect(autoSellMills(10, 999, TICKS)).toBeNull()
   })
 
   it('is told apart from the target', () => {
     const base: TradeTarget = { id: 'a', env: 'demo', ticker: 'T', outcome: 'up', topMills: 700, state: 'watching', message: '', soldContracts: 0, closesAt: 0 }
-    const trail: TradeTarget = { ...base, id: 'b', kind: 'trail', trailPct: 5, highMills: 800, topMills: 660 }
-    expect(quickPlan([trail, base], 'T')?.id).toBe('a')
-    expect(quickTrail([trail, base], 'T')?.id).toBe('b')
-    expect(quickPlan([trail], 'T')).toBeNull()
+    const auto: TradeTarget = { ...base, id: 'b', kind: 'auto-sell', underPct: 5, topMills: 982 }
+    expect(quickPlan([auto, base], 'T')?.id).toBe('a')
+    expect(quickAutoSell([auto, base], 'T')?.id).toBe('b')
+    expect(quickPlan([auto], 'T')).toBeNull()
   })
 })

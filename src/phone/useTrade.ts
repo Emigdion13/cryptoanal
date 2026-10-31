@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TradeEnv, TradeResult, TradeState } from '../trade/kalshiTrade'
 import { phoneFetch } from './auth'
 
-export type TradeRoute = 'buy' | 'sell-now' | 'target' | 'target/cancel' | 'trail'
+export type TradeRoute = 'buy' | 'sell-now' | 'target' | 'target/cancel' | 'auto-sell'
 
 /** The answer to the last tap: Kalshi's words, and how long the order took. */
 export interface TradeStatus {

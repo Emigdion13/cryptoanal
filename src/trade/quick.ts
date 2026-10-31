@@ -82,19 +82,19 @@ export function keypadNumber(value: string): number | null {
   return value !== '' && Number.isFinite(n) && n > 0 ? n : null
 }
 
-/** Every buy starts a trailing sell this far (%) under the highest bid since. */
-export const QUICK_TRAIL_PCT = 5
+/** Every buy queues a sell that makes the most the buy can make less this much (%). */
+export const QUICK_AUTO_SELL_UNDER_PCT = 5
 
 const working = (t: TradeTarget) => t.state === 'watching' || t.state === 'selling'
 
-/** The target working on this round, if any (the trailing sell is not one). */
+/** The target working on this round, if any (the auto-sell is not one). */
 export function quickPlan(targets: readonly TradeTarget[], ticker: string): TradeTarget | null {
-  return targets.find((t) => t.ticker === ticker && t.kind !== 'trail' && working(t)) ?? null
+  return targets.find((t) => t.ticker === ticker && t.kind !== 'auto-sell' && working(t)) ?? null
 }
 
-/** The trailing sell working on this round, if any. */
-export function quickTrail(targets: readonly TradeTarget[], ticker: string): TradeTarget | null {
-  return targets.find((t) => t.ticker === ticker && t.kind === 'trail' && working(t)) ?? null
+/** The auto-sell on this round, if any. */
+export function quickAutoSell(targets: readonly TradeTarget[], ticker: string): TradeTarget | null {
+  return targets.find((t) => t.ticker === ticker && t.kind === 'auto-sell' && working(t)) ?? null
 }
 
 /** The lowest price Sell now accepts: 2¢ under the bid, on Kalshi's grid. */

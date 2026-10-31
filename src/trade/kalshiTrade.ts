@@ -158,17 +158,23 @@ export function netProfitDollars(count: number, entry: number, exit: number, fee
 }
 
 /**
- * The lowest price on the grid at which selling all `count` bought at `entry` to the bid loses
- * nothing, after the buy's fee and the sale's; null when none under $1 does.
+ * The price of the sell every buy queues: the lowest on the grid at which selling all `count` bought
+ * at `entry` makes the most the buy can make (all of it settling at $1) less `underPct`%, after the
+ * buy's fee and the resting sale's. Past the top of the grid, the top; null when even that loses.
+ * 10 bought at 60¢ can make $3.83; 5% less is $3.64, at 98.2¢.
  */
-export function breakEvenMills(count: number, entry: number, ticks: readonly number[], feeMultiplier = 1): number | null {
-  for (const tick of ticks) if (tick >= entry && netProfitDollars(count, entry, tick, feeMultiplier, true, true) >= 0) return tick
-  return null
-}
-
-/** A trailing sell's moment: buyers pay `pct`% under the `high` bid or less, but no less than `floor`. */
-export function trailFires(bid: number | null, high: number, floor: number | null, pct: number): boolean {
-  return bid !== null && floor !== null && bid >= floor && bid <= high * (1 - pct / 100) + 1e-9
+export function autoSellMills(count: number, entry: number, ticks: readonly number[], feeMultiplier = 1, makerFees = true, underPct = 5): number | null {
+  const most = netProfitDollars(count, entry, 1000, feeMultiplier)
+  if (!(most > 0)) return null
+  const wanted = most * (1 - underPct / 100)
+  let top: number | null = null
+  for (const tick of ticks) {
+    if (tick <= entry || tick >= 1000) continue
+    const net = netProfitDollars(count, entry, tick, feeMultiplier, makerFees)
+    if (net >= wanted - 1e-9) return tick
+    if (net >= 0) top = tick
+  }
+  return top
 }
 
 /** Selling the whole holding to the bid right now, in dollars: the move, both fees, and the cash. */
@@ -516,13 +522,16 @@ export interface TradeTarget {
   /** When the round closes, unix ms: the target ends with it. */
   closesAt: number
   /**
-   * 'trail': a trailing sell, started by every buy. It sells everything once buyers pay `trailPct`%
-   * under the highest bid since (`highMills`), but never at a loss: `topMills` is then the lowest
-   * price that still makes money after both fees (0 until the holding is read).
+   * 'auto-sell': the sell every buy queues on Kalshi, resting, for everything held at `topMills`:
+   * the price that makes the most the buy can make less `underPct`%, after fees (0 until it rests).
+   * Never at a loss: with no such price, none is queued.
    */
-  kind?: 'target' | 'trail'
-  trailPct?: number
-  highMills?: number
+  kind?: 'target' | 'auto-sell'
+  underPct?: number
+  /** Its order on Kalshi while it rests. */
+  orderId?: string
+  /** What selling everything at `topMills` makes, after both fees. */
+  profitDollars?: number
 }
 
 /** What the phone sees: one environment's account on one coin's running round. */
