@@ -122,8 +122,8 @@ body.phone-body {
 .phone-card.is-os {
   border-color: rgba(43, 185, 155, 0.6);
 }
-/* The indicators: tiles three to a row; the open one takes a whole row, under the row it was in
-   (dense: the tiles after it fill the gap it leaves). */
+/* The indicators: tiles three to a row; the open one takes the whole first row, just under the
+   price chart (dense: the tiles after it fill the gap it leaves). */
 .phone-tiles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -131,6 +131,7 @@ body.phone-body {
   gap: 8px;
 }
 .phone-tile.is-open {
+  order: -1;
   grid-column: 1 / -1;
   animation: phone-grow 0.18s ease-out;
 }

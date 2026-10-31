@@ -35,6 +35,8 @@ const CARD_BG = '#151a21'
  * busy redrawing cards could not follow a finger on the chart. A touched bar is followed at once. */
 const CARD_LIVE_MS = 1_000
 /** The screens left to right: History, then Charts (where the page opens). */
+/** The page opens on the 1-minute chart, whichever chart the desktop has active. */
+const OPEN_INTERVAL = '1'
 const LANES = ['history', 'charts'] as const
 type Lane = (typeof LANES)[number]
 
@@ -58,6 +60,12 @@ function readDesktop(settings: Partial<Settings> | null): Desktop {
     scaleFit: { ...SCALE_FIT_DEFAULTS, ...settings?.scaleFit },
     drawings: settings?.drawingPrefs?.hidden ? {} : (settings?.drawings ?? {}),
   }
+}
+
+/** The tab the page opens on: the first 1-minute chart, else the desktop's active one. */
+function firstChart(desktop: Desktop): number {
+  const oneMinute = desktop.charts.findIndex((c) => c.interval === OPEN_INTERVAL)
+  return oneMinute >= 0 ? oneMinute : desktop.active
 }
 
 /** Follows the desktop's workspace: read now, then every FOLLOW_MS while the page is showing. */
@@ -114,7 +122,7 @@ function useDesktop(onSignedOut: () => void) {
 export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean; onSignOut: () => void; onSignedOut: () => void }) {
   const { desktop, problem } = useDesktop(onSignedOut)
   const [picked, setPicked] = useState<number | null>(null)
-  const index = desktop ? Math.min(picked ?? desktop.active, desktop.charts.length - 1) : 0
+  const index = desktop ? Math.min(picked ?? firstChart(desktop), desktop.charts.length - 1) : 0
   const chart = desktop?.charts[index] ?? null
   const trade = useTrade(chart?.symbol ?? 'BTC-USD')
   // The quick-trade circles are showing.
@@ -271,6 +279,11 @@ const ChartCards = memo(function ChartCards({
   // The indicator opened from its tile; at most one.
   const [open, setOpen] = useState<string | null>(null)
   useCloseOnTapOutside(open !== null, () => setOpen(null))
+  // It opens under the price chart, which a tap on a lower tile may have scrolled away.
+  const tilesRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (open) tilesRef.current?.querySelector('.phone-tile.is-open')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [open])
 
   useEffect(() => {
     const e = new ChartEngine(hostRef.current!)
@@ -357,7 +370,7 @@ const ChartCards = memo(function ChartCards({
         </div>
       </section>
       {engine && cards.length > 0 && (
-        <div className="phone-tiles">
+        <div className="phone-tiles" ref={tilesRef}>
           {cards.map((inst) => {
             const def = INDICATOR_BY_TYPE.get(inst.type)!
             return (
