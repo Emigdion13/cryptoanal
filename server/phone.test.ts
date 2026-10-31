@@ -312,6 +312,29 @@ describe('the gate in front of the app', () => {
     expect((await call('POST', '/api/phone/settings', { cookie, body: { enabled: false } })).body).toMatchObject({ error: 'NOT_LOCAL' })
   })
 
+  it('keeps its own indicators: a signed-in phone changes them, the desktop’s never', async () => {
+    expect((await call('GET', '/api/phone/indicators')).body).toMatchObject({ error: 'SIGNED_OUT' })
+    expect((await call('POST', '/api/phone/indicators', { body: { indicators: [] } })).body).toMatchObject({ error: 'SIGNED_OUT' })
+    const cookie = (await call('POST', '/api/phone/login', { body: { passcode: '482913' } })).setCookie.split(';')[0]
+    // Nothing saved yet: the phone shows the desktop chart's own.
+    expect((await call('GET', '/api/phone/indicators', { cookie })).body).toEqual({ indicators: null })
+
+    const rsi = { id: 'a1', type: 'rsi', inputs: { length: 14 }, styles: { rsi: { color: '#7e57c2', width: 1, visible: true } }, hidden: false }
+    const saved = await call('POST', '/api/phone/indicators', { cookie, body: { indicators: [rsi, { ...rsi, id: 'a2', type: 'trendPressure' }] } })
+    expect(saved.status).toBe(200)
+    expect((await call('GET', '/api/phone/indicators', { cookie })).body).toMatchObject({ indicators: [{ type: 'rsi' }, { type: 'trendPressure' }] })
+    expect(JSON.parse(readFileSync(join(dir, 'phone-profile.json'), 'utf8')).indicators).toHaveLength(2)
+
+    for (const indicators of [[{ ...rsi, type: 'nope' }], [rsi, rsi], [{ ...rsi, inputs: { length: { $gt: 1 } } }], 'rsi', Array(41).fill(rsi)])
+      expect((await call('POST', '/api/phone/indicators', { cookie, body: { indicators } })).body).toMatchObject({ error: 'BAD_BODY' })
+    expect((await call('GET', '/api/phone/indicators', { cookie })).body).toMatchObject({ indicators: [{ type: 'rsi' }, { type: 'trendPressure' }] })
+
+    // Back to the desktop's; and the desktop's workspace was never touched.
+    expect((await call('POST', '/api/phone/indicators', { cookie, body: { indicators: null } })).body).toEqual({ indicators: null })
+    expect(JSON.parse(readFileSync(workspace, 'utf8')).settings).toEqual({ layout: '2v' })
+    expect((await call('GET', '/api/phone/indicators', { from: 'local' })).body).toEqual({ indicators: null })
+  })
+
   it("the computer's own browser is unaffected", async () => {
     expect((await call('GET', '/api/workspace', { from: 'local' })).body).toMatchObject({ writable: true })
     expect((await call('GET', '/api/phone/session', { from: 'local' })).body).toMatchObject({ local: true, signedIn: true })

@@ -15,6 +15,7 @@ import { LAYOUT_BY_ID } from '../ui/layouts'
 import { defaults, SCALE_FIT_DEFAULTS, type ChartState, type Settings } from '../ui/settings'
 import { phoneFetch, PhoneRequestError } from './auth'
 import { HistoryIcon, PhoneHistory } from './PhoneHistory'
+import { IndicatorsIcon, PhoneIndicatorSheet, usePhoneIndicators } from './PhoneIndicators'
 import { PhoneQuickTrade } from './PhoneQuickTrade'
 import { useTrade, type Trade } from './useTrade'
 
@@ -112,7 +113,8 @@ function useDesktop(onSignedOut: () => void) {
  * then the price card with the desktop's overlays and drawings, and a tile per indicator that has a
  * pane of its own (floating ones too): its call, its value and a sparkline. A tap opens a tile into
  * the whole card; a tap anywhere else (or on another tile) closes it. Touch the price chart to read
- * a bar: the tiles and the card follow it. Everything follows the desktop's workspace.
+ * a bar: the tiles and the card follow it. The charts follow the desktop's workspace; the
+ * indicators are the phone's own once it has some (the header's chart button, PhoneIndicators.tsx).
  *
  * The button at the bottom middle shows V2's quick-trade circles on the coin's 15-minute Kalshi
  * market, and turns into an X that hides them. The
@@ -123,7 +125,14 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
   const { desktop, problem } = useDesktop(onSignedOut)
   const [picked, setPicked] = useState<number | null>(null)
   const index = desktop ? Math.min(picked ?? firstChart(desktop), desktop.charts.length - 1) : 0
-  const chart = desktop?.charts[index] ?? null
+  const desktopChart = desktop?.charts[index] ?? null
+  // The phone's own indicators on every tab, once it has saved some; the desktop chart's until then.
+  const mine = usePhoneIndicators(onSignedOut)
+  const [editing, setEditing] = useState(false)
+  const chart = useMemo(
+    () => (desktopChart && mine.list ? { ...desktopChart, indicators: mine.list } : desktopChart),
+    [desktopChart, mine.list],
+  )
   const trade = useTrade(chart?.symbol ?? 'BTC-USD')
   // The quick-trade circles are showing.
   const [quick, setQuick] = useState(false)
@@ -177,8 +186,11 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
               </span>
             )}
             <span className="phone-spacer" />
-            <span className="phone-note phone-dim">{desktop ? 'desktop · live' : 'connecting…'}</span>
+            <span className="phone-note phone-dim">{desktop ? (mine.list ? 'phone · live' : 'desktop · live') : 'connecting…'}</span>
             <AccountBadge trade={trade} />
+            <button className="phone-icon-btn" onClick={() => setEditing(true)} title="Indicators" aria-label="Indicators">
+              <IndicatorsIcon />
+            </button>
             <button className="phone-icon-btn" onClick={() => go('history')} title="History" aria-label="History">
               <HistoryIcon />
             </button>
@@ -198,7 +210,7 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
             </nav>
           )}
           {problem && <div className="phone-problem">{problem}</div>}
-          {chart && desktop ? (
+          {chart && desktop && (mine.ready || mine.problem) ? (
             <ChartCards key={index} chart={chart} scaleFit={desktop.scaleFit} drawings={desktop.drawings[chart.symbol]} />
           ) : (
             !problem && <div className="phone-wait">Reading the desktop's chart…</div>
@@ -206,6 +218,16 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
         </section>
       </div>
       {/* Outside the scrolling screens, so fixed means the phone's screen. */}
+      {editing && chart && (
+        <PhoneIndicatorSheet
+          shown={chart.indicators}
+          own={mine.list !== null}
+          problem={mine.problem}
+          onChange={mine.save}
+          onReset={() => mine.save(null)}
+          onClose={() => setEditing(false)}
+        />
+      )}
       {quick && chart && lane === 'charts' && <PhoneQuickTrade trade={trade} />}
       {chart && lane === 'charts' && (
         <button

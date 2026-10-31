@@ -975,3 +975,122 @@ button.phone-account:active {
     transform: rotate(360deg);
   }
 }
+
+/* The phone's own indicators: a sheet from the bottom over everything. */
+.phone-ind-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.55);
+}
+.phone-ind-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-height: 86vh;
+  padding: 14px 14px calc(env(safe-area-inset-bottom) + 14px);
+  border-top: 1px solid var(--phone-line);
+  border-radius: 16px 16px 0 0;
+  background: #1a2029;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.6);
+}
+.phone-ind-head {
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+}
+.phone-ind-done {
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: var(--phone-up);
+  font-size: 15px;
+  font-weight: 600;
+}
+.phone-ind-note {
+  margin: 0;
+  font-size: 12px;
+}
+.phone-ind-list {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  max-height: 30vh;
+  overflow-y: auto;
+  border: 1px solid var(--phone-line-soft);
+  border-radius: 10px;
+  background: var(--phone-card);
+  -webkit-overflow-scrolling: touch;
+}
+.phone-ind-list.is-catalog {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 120px;
+}
+.phone-ind-list > .phone-ind-note {
+  padding: 12px;
+}
+.phone-ind-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 8px 6px 12px;
+  border-bottom: 1px solid var(--phone-line-soft);
+}
+.phone-ind-row:last-child {
+  border-bottom: 0;
+}
+.phone-ind-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 14px;
+}
+.phone-ind-name small {
+  font-size: 11px;
+}
+.phone-ind-btn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(43, 185, 155, 0.5);
+  border-radius: 9px;
+  color: var(--phone-up);
+  font-size: 20px;
+  line-height: 1;
+}
+.phone-ind-btn.is-remove {
+  border-color: rgba(237, 103, 115, 0.5);
+  color: var(--phone-down);
+}
+/* Already on the phone: still addable (twice, with other inputs later), just quieter. */
+.phone-ind-btn.is-added {
+  border-color: var(--phone-line);
+  color: var(--phone-muted);
+}
+.phone-ind-btn:active,
+.phone-ind-done:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+.phone-ind-search {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--phone-line);
+  border-radius: 10px;
+  background: var(--phone-card);
+  color: var(--phone-text);
+  font-size: 16px; /* under 16px, iOS zooms the page on focus */
+}
+.phone-ind-reset {
+  padding: 10px;
+  border: 1px solid var(--phone-line);
+  border-radius: 10px;
+  color: var(--phone-muted);
+  font-size: 14px;
+}

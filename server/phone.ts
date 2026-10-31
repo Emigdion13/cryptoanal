@@ -19,6 +19,7 @@ import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'n
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { dirname, join } from 'node:path'
 import type { Plugin } from 'vite'
+import { cleanIndicators, PhoneProfile } from './phoneProfile'
 import { header, isLoopback, isProxied, requestHost } from './proxy'
 import { workspaceFile } from './workspace'
 
@@ -557,15 +558,17 @@ export async function readJson(req: IncomingMessage): Promise<Record<string, unk
 export const PHONE_WRITES = new Set(['/api/trade/buy', '/api/trade/sell-now', '/api/trade/target', '/api/trade/target/cancel'])
 
 /**
- * `/api/phone/*` (the phone's sign-in, and the computer's Phone access settings), and the gate in
- * front of everything else for requests through Tailscale: the desktop page sends them to
- * phone.html, and any other /api/ request needs a signed-in phone and is read-only, except the
- * quick-trade orders (`PHONE_WRITES`).
+ * `/api/phone/*` (the phone's sign-in, its own indicators, and the computer's Phone access
+ * settings), and the gate in front of everything else for requests through Tailscale: the desktop
+ * page sends them to phone.html, and any other /api/ request needs a signed-in phone and is
+ * read-only, except the quick-trade orders (`PHONE_WRITES`).
  */
 export function createPhoneApi(
   phone = new PhoneAccess(join(dirname(workspaceFile()), 'phone.json')),
   port = () => 5190,
   log: (line: string) => void = (line) => console.log(line),
+  /** The phone's own indicators, next to its access file. */
+  profile = new PhoneProfile(join(dirname(phone.file), 'phone-profile.json')),
 ) {
   const json = (res: ServerResponse, status: number, value: unknown) => {
     if (res.destroyed || res.writableEnded) return
@@ -593,8 +596,22 @@ export function createPhoneApi(
     json(res, 200, { ...phone.view(), ...(await tailscaleAddress(port())), port: port() })
   }
 
+  /** The phone's indicators: read and changed by a signed-in phone, or by this computer. */
+  const indicators = async (req: IncomingMessage, res: ServerResponse) => {
+    if (phone.phoneHost(req) === null) guardLocal(req)
+    else phone.guard(req)
+    if (req.method === 'POST') {
+      const body = await readJson(req)
+      const list = body.indicators === null ? null : cleanIndicators(body.indicators)
+      profile.write(list)
+      log(`[phone] indicators ${list ? `saved (${list.map((i) => i.type).join(', ') || 'none'})` : 'back to the desktop’s'}`)
+    } else if (req.method !== 'GET') throw new PhoneError(405, 'Use GET or POST.', 'METHOD')
+    json(res, 200, { indicators: profile.read() })
+  }
+
   const dispatch = async (req: IncomingMessage, res: ServerResponse, route: string) => {
     if (route === 'settings') return settings(req, res)
+    if (route === 'indicators') return indicators(req, res)
     // phone.html opened on this computer itself: already trusted, no sign-in.
     if (route === 'session' && phone.phoneHost(req) === null) {
       guardLocal(req)
