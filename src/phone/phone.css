@@ -601,7 +601,7 @@ button.phone-account:active {
   text-overflow: ellipsis;
 }
 /* What is held: a column of blocks on the right, under the buyers / sellers split (phone-flow),
-   open or closed. Only the auto-sell block takes taps; the chart is reachable around the rest. */
+   open or closed. Only Sell now and the auto-sell take taps; the chart is reachable around the rest. */
 .phone-hold {
   position: fixed;
   top: calc(env(safe-area-inset-top) + 156px);
@@ -657,9 +657,25 @@ button.phone-account:active {
 .phone-hold-block.is-target b {
   color: #6ab0ff;
 }
+.phone-hold-block.is-sell,
 .phone-hold-block.is-auto {
   pointer-events: auto;
   touch-action: manipulation;
+}
+/* Sell now: red, to be found at a glance. */
+.phone-hold-block.is-sell {
+  border-color: rgba(237, 103, 115, 0.7);
+  background: linear-gradient(rgba(237, 103, 115, 0.2), rgba(237, 103, 115, 0.2)), rgba(21, 26, 33, 0.94);
+}
+.phone-hold-block.is-sell small {
+  color: #ff8a94;
+  font-weight: 700;
+}
+.phone-hold-block.is-sell.is-armed {
+  border-color: #f0b429;
+}
+.phone-hold-block.is-sell.is-armed b {
+  color: #f0b429;
 }
 .phone-hold-block.is-auto b {
   color: var(--phone-muted);
@@ -670,9 +686,11 @@ button.phone-account:active {
 .phone-hold-block.is-auto.is-on b {
   color: #f0b429;
 }
+.phone-hold-block.is-sell:active:not(:disabled),
 .phone-hold-block.is-auto:active:not(:disabled) {
   transform: scale(0.97);
 }
+.phone-hold-block.is-sell:disabled,
 .phone-hold-block.is-auto:disabled {
   opacity: 0.5;
 }

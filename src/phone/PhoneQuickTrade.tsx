@@ -232,24 +232,26 @@ export function PhoneQuickTrade({ trade }: { trade: Trade }) {
 
 /**
  * What is held in the running round, as a column of blocks on the right under the buyers /
- * sellers split: the holding, the bid, what selling now leaves after fees, the target and the
+ * sellers split: the holding, the bid, Sell now with what it leaves after fees, the target and the
  * auto-sell (a tap takes it off for this round, or queues it again). Shown while anything is held,
- * with the quick-trade circles open or closed.
+ * with the quick-trade circles open or closed, so Sell now is always there to tap.
  */
 export function HoldingColumn({ trade }: { trade: Trade }) {
-  const { state, busy, send } = trade
+  const { state, busy, armed, send } = trade
   const market = state?.market ?? null
   const position = state?.position ?? null
-  const held = position && position.avgMills !== null && position.contracts > 0 ? position : null
+  // Anything held, even without the average Kalshi paid it at (then the money is unknown).
+  const held = position && position.contracts > 0 ? position : null
   if (!held || !market) return null
   const bid = held.outcome === 'up' ? market.upBid : market.downBid
-  const entry = held.avgMills ?? 0
+  const entry = held.avgMills
   const mine = quickPlan(state?.targets ?? [], market.ticker)
   const auto = quickAutoSell(state?.targets ?? [], market.ticker)
   // What selling it all at the bid now leaves in the cash: the move less the buy's and the sale's fee.
-  const sold = bid !== null ? sellNowResult(held.contracts, entry, bid, market.feeMultiplier) : null
+  const sold = bid !== null && entry !== null ? sellNowResult(held.contracts, entry, bid, market.feeMultiplier) : null
   // A target sells to the buyers there (a taker sale), at the target at least.
-  const targetMoney = mine ? netProfitDollars(held.contracts, entry, mine.topMills, market.feeMultiplier, market.makerFees, true) : null
+  const targetMoney = mine && entry !== null ? netProfitDollars(held.contracts, entry, mine.topMills, market.feeMultiplier, market.makerFees, true) : null
+  const floor = quickSellFloor(bid, market)
   const off = !state?.canTrade || !!busy
 
   return (
@@ -257,17 +259,27 @@ export function HoldingColumn({ trade }: { trade: Trade }) {
       <div className={`phone-hold-block is-${held.outcome}`}>
         <small>Holding</small>
         <b>
-          {word(held.outcome)} {held.outcome === 'up' ? '▲' : '▼'} {count(held.contracts)} @ {formatCents(entry)}
+          {word(held.outcome)} {held.outcome === 'up' ? '▲' : '▼'} {count(held.contracts)}
+          {entry !== null ? ` @ ${formatCents(entry)}` : ''}
         </b>
       </div>
       <div className="phone-hold-block">
         <small>Bid now</small>
         <b>{formatCents(bid)}</b>
       </div>
-      <div className="phone-hold-block" title={sold ? sellNowBreakdown(sold) : undefined}>
-        <small>Sold now, after fees</small>
-        <b className={sold ? `phone-quick-money ${tone(sold.netDollars)}` : ''}>{sold ? money(sold.netDollars) : '—'}</b>
-      </div>
+      {/* Sells it all to the buyers now, as the Sell now circle does (Live: tap twice). */}
+      <button
+        type="button"
+        className={`phone-hold-block is-sell${armed === 'hout' ? ' is-armed' : ''}`}
+        disabled={off || floor === null}
+        title={sold ? sellNowBreakdown(sold) : undefined}
+        onClick={() => void send('hout', 'sell-now', { ticker: market.ticker, minMills: floor })}
+      >
+        <small>{floor === null ? 'Sell now · no buyers' : 'Sell now · after fees'}</small>
+        <b className={sold && busy !== 'hout' && armed !== 'hout' ? `phone-quick-money ${tone(sold.netDollars)}` : ''}>
+          {busy === 'hout' ? 'Selling…' : armed === 'hout' ? 'Tap again · LIVE' : sold ? money(sold.netDollars) : `at ${formatCents(bid)}`}
+        </b>
+      </button>
       {mine ? (
         <div className="phone-hold-block is-target">
           <small>Target</small>
@@ -292,6 +304,16 @@ export function HoldingColumn({ trade }: { trade: Trade }) {
       </button>
     </div>
   )
+}
+
+/** The last order's answer while the quick-trade circles are closed (open, they show their own). */
+export function TradeNote({ trade }: { trade: Trade }) {
+  const { status } = trade
+  return status ? (
+    <div className={`phone-quick-pill phone-quick-note is-${status.tone}`} role="status">
+      {status.text}
+    </div>
+  ) : null
 }
 
 /** "98.2¢ · +$3.64 ✕": the auto-sell's order resting on Kalshi (a tap takes it off). */

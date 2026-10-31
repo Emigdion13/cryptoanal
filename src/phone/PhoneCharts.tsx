@@ -30,7 +30,7 @@ import { HistoryIcon, PhoneHistory } from './PhoneHistory'
 import { IndicatorsIcon, PhoneIndicatorSheet, reordered, usePhoneIndicators } from './PhoneIndicators'
 import { FlowPill, TimingPicker, usePhoneTiming } from './PhoneFlow'
 import { KalshiOdds, NextRoundSheet, NextRoundTimer } from './PhoneNextRound'
-import { HoldingColumn, PhoneQuickTrade } from './PhoneQuickTrade'
+import { HoldingColumn, PhoneQuickTrade, TradeNote } from './PhoneQuickTrade'
 import { useTrade, type Trade } from './useTrade'
 
 /** How often the phone rereads the desktop's workspace, to follow its symbol, interval and indicators. */
@@ -275,6 +275,7 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
         />
       )}
       {quick && chart && lane === 'charts' && <PhoneQuickTrade trade={trade} />}
+      {!quick && !nextRound && chart && lane === 'charts' && <TradeNote trade={trade} />}
       {chart && lane === 'charts' && (
         <>
           <FlowPill product={chart.symbol} interval={chart.interval} />
