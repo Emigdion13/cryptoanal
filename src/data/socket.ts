@@ -8,6 +8,8 @@ export interface Match {
   time: number
   /** Coinbase's trade id: rising per product. */
   id: number
+  /** The aggressor bought (took an ask); false: sold into a bid. */
+  buy: boolean
 }
 
 export interface Ticker {
@@ -115,6 +117,8 @@ class CoinbaseFeed {
         size: Number(msg.size),
         time: Date.parse(msg.time) / 1000,
         id: Number(msg.trade_id),
+        // Coinbase names the resting order's side: a resting sell was taken by a buyer.
+        buy: msg.side === 'sell',
       }
       for (const fn of set) fn(m)
     } else if (msg.type === 'ticker') {

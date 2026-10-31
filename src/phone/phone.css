@@ -829,9 +829,9 @@ button.phone-account:active {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 76px;
+  width: 72px;
   height: 44px;
-  padding: 0 12px;
+  padding: 0 6px;
   border: 1px solid var(--phone-line);
   border-radius: 999px;
   background: rgba(21, 26, 33, 0.96);
@@ -866,6 +866,86 @@ button.phone-account:active {
 }
 .phone-next-timer.is-armed small {
   color: #f0b429;
+}
+
+/* Left of the timer: buyers vs sellers, Kalshi style; the fill behind splits at the buyers' share. */
+.phone-flow {
+  --buy: 50%;
+  position: fixed;
+  left: 8px;
+  right: calc(50% + 118px);
+  bottom: calc(env(safe-area-inset-bottom) + 20px);
+  z-index: 16;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  max-width: 120px;
+  margin-left: auto;
+  height: 44px;
+  overflow: hidden;
+  border: 1px solid var(--phone-line);
+  border-radius: 999px;
+  background: linear-gradient(to right, rgba(43, 185, 155, 0.22) var(--buy), rgba(237, 103, 115, 0.22) var(--buy)), rgba(21, 26, 33, 0.96);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.phone-flow-up {
+  color: #4fe0c0;
+}
+.phone-flow-down {
+  color: #ff8a94;
+}
+.phone-flow.is-buyers .phone-flow-up,
+.phone-flow.is-sellers .phone-flow-down {
+  font-size: 14px;
+  font-weight: 700;
+}
+.phone-flow.is-buyers {
+  border-color: rgba(43, 185, 155, 0.6);
+}
+.phone-flow.is-sellers {
+  border-color: rgba(237, 103, 115, 0.6);
+}
+.phone-flow.is-partial {
+  border-style: dashed;
+}
+
+/* Right of the quick-trade button: the window buyers vs sellers is taken over. */
+.phone-flow-windows {
+  position: fixed;
+  left: calc(50% + 38px);
+  right: 8px;
+  bottom: calc(env(safe-area-inset-bottom) + 24px);
+  z-index: 16;
+  display: flex;
+  max-width: 200px;
+  height: 36px;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--phone-line);
+  border-radius: 999px;
+  background: rgba(21, 26, 33, 0.96);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+}
+.phone-flow-windows button {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--phone-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  touch-action: manipulation;
+}
+.phone-flow-windows button.is-on {
+  background: #12304f;
+  color: #6ab0ff;
+  font-weight: 600;
 }
 
 /* The Next round sheet: the keypad's sheet, with the armed buy's settings. */

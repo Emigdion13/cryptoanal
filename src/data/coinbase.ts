@@ -54,17 +54,20 @@ export interface Trade {
   time: number
   price: number
   size: number
+  /** The aggressor bought (took an ask); false: sold into a bid. */
+  buy?: boolean
 }
 
 /** One page of trades, newest first: the newest of all, or those just before trade `olderThan`. */
 export async function fetchTrades(product: string, olderThan?: number): Promise<Trade[]> {
   // Coinbase's `after` cursor pages back in time.
   const cursor = olderThan === undefined ? '' : `&after=${olderThan}`
-  const rows = await getJson<{ trade_id: number; time: string; price: string; size: string }[]>(
+  const rows = await getJson<{ trade_id: number; time: string; price: string; size: string; side: string }[]>(
     `/products/${product}/trades?limit=${TRADE_PAGE}${cursor}`,
   )
   return rows
-    .map((r) => ({ id: r.trade_id, time: Date.parse(r.time) / 1000, price: Number(r.price), size: Number(r.size) }))
+    // Coinbase names the resting order's side: a resting sell was taken by a buyer.
+    .map((r) => ({ id: r.trade_id, time: Date.parse(r.time) / 1000, price: Number(r.price), size: Number(r.size), buy: r.side === 'sell' }))
     .sort((a, b) => b.id - a.id)
 }
 
