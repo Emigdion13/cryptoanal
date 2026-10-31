@@ -1,4 +1,5 @@
 import type {
+  AutoscaleInfo,
   IChartApi,
   IPanePrimitive,
   ISeriesPrimitive,
@@ -38,8 +39,57 @@ export class DrawingPrimitive implements IPanePrimitive<Time>, ISeriesPrimitive<
   constructor(
     series: ISeriesApi<SeriesType>,
     private layer: 'back' | 'front',
+    /** The scale makes room for the drawings in view (an indicator's own pane, as TradingView's). */
+    private fit = false,
   ) {
     this.series = series
+  }
+
+  private fitCache: { start: number; end: number; drawings: Drawing[]; info: AutoscaleInfo | null } | null = null
+
+  /**
+   * The values the drawings in view sit at, and the pixels their marks and labels reach beyond
+   * them: TMO's ▴▾ under the lines, a divergence's label under its low.
+   */
+  autoscaleInfo(start: Logical, end: Logical): AutoscaleInfo | null {
+    if (!this.fit) return null
+    const cache = this.fitCache
+    if (cache && cache.start === start && cache.end === end && cache.drawings === this.drawings) return cache.info
+    let min = Infinity,
+      max = -Infinity,
+      above = 0,
+      below = 0
+    const take = (y: number, up = 0, down = 0) => {
+      if (!Number.isFinite(y)) return
+      min = Math.min(min, y)
+      max = Math.max(max, y)
+      above = Math.max(above, up)
+      below = Math.max(below, down)
+    }
+    const inView = (from: number, to: number) => to >= start && from <= end
+    for (const d of this.drawings) {
+      if (d.type === 'line' || d.type === 'box') {
+        const x2 = d.x2 === 'end' ? this.last : d.x2
+        if (!inView(Math.min(d.x1, x2), d.type === 'line' && d.extendRight ? Infinity : Math.max(d.x1, x2))) continue
+        if (d.type === 'line') take(d.y1), take(d.y2)
+        else take(d.top), take(d.bottom)
+      } else if (d.type === 'text') {
+        if (!inView(d.x === 'end' ? this.last : d.x, d.x === 'end' ? this.last : d.x)) continue
+        const half = ((d.size ?? 10) + (d.bg ? 8 : 0)) / 2
+        const dy = d.dy ?? 0
+        take(d.y, Math.max(0, half - dy), Math.max(0, half + dy))
+      } else if (d.type === 'triangle') {
+        if (inView(d.x, d.x)) take(d.y, d.size + 1, d.size + 1)
+      } else if (d.type === 'shape') {
+        if (!inView(d.x, d.x)) continue
+        const below = d.shape === 'triangleUp' || d.shape === 'arrowUp' || d.shape === 'plotArrowUp' || d.shape === 'labelUp'
+        const reach = d.offset + shapeReach(d)
+        take(d.y, below ? 0 : reach, below ? reach : 0)
+      }
+    }
+    const info = min <= max ? { priceRange: { minValue: min, maxValue: max }, margins: { above: Math.ceil(above), below: Math.ceil(below) } } : null
+    this.fitCache = { start, end, drawings: this.drawings, info }
+    return info
   }
 
   attached(param: PaneAttachedParameter<Time>) {
@@ -254,4 +304,12 @@ export class DrawingPrimitive implements IPanePrimitive<Time>, ISeriesPrimitive<
       ctx.fillText(d.text, x, tip + dir * (length + 9))
     }
   }
+}
+
+/** How far a mark reaches past its tip, as drawShape draws it. */
+function shapeReach(d: Extract<Drawing, { type: 'shape' }>): number {
+  if (d.shape === 'triangleUp' || d.shape === 'triangleDown') return 7
+  if (d.shape === 'labelUp' || d.shape === 'labelDown') return 4 + 15
+  const length = d.shape === 'plotArrowUp' || d.shape === 'plotArrowDown' ? 55 : 12
+  return length + (d.text ? 15 : 0)
 }

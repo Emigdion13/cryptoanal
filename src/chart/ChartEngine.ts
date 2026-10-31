@@ -129,6 +129,17 @@ const asTime = (t: number) => t as UTCTimestamp
 /** Shown in its floating window rather than in a pane: one or the other, never both. */
 const floats = (inst: IndicatorInstance) => !!inst.floating?.open
 
+/** A series' fit, widened to take in fixed values (levels, the edges of filled bands). */
+function withBounds(info: AutoscaleInfo | null, bounds: number[]): AutoscaleInfo {
+  const lo = Math.min(...bounds),
+    hi = Math.max(...bounds)
+  const range = info?.priceRange
+  return {
+    ...info,
+    priceRange: range ? { minValue: Math.min(range.minValue, lo), maxValue: Math.max(range.maxValue, hi) } : { minValue: lo, maxValue: hi },
+  }
+}
+
 /** A translucent color as it looks over the black pane, made opaque for an axis label. */
 function opaqueOnBlack(color: string): string {
   const m = /rgba\(\s*([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\s*\)/.exec(color)
@@ -592,6 +603,14 @@ export class ChartEngine {
           rt.fill = new FillPrimitive()
           first.attachPrimitive(rt.fill)
         }
+        // TradingView fits a pane to its hlines and the bands filled between them (RSI's 30–70,
+        // TMO's OB/OS zones), not only to the lines: otherwise they run off the pane's edges.
+        const bounds = [
+          ...(def.levels ?? []).map((l) => l.value),
+          ...(def.fills ?? []).flatMap((f) => [f.from, f.to]).filter((v): v is number => typeof v === 'number'),
+        ]
+        if (pane > 0 && !def.ownScale && bounds.length)
+          first.applyOptions({ autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => withBounds(original(), bounds) })
       }
       // Drawings sit on the pane, placed on the scale of the indicator's first line (or the
       // price series for drawing-only overlays such as Smart Money Concepts).
@@ -600,7 +619,8 @@ export class ChartEngine {
       if (reference && paneApi) {
         rt.drawing = new DrawingPrimitive(reference, 'back')
         paneApi.attachPrimitive(rt.drawing)
-        rt.front = new DrawingPrimitive(reference, 'front')
+        // In a pane of its own, the scale makes room for the marks and labels too.
+        rt.front = new DrawingPrimitive(reference, 'front', pane > 0 && !def.ownScale)
         rt.frontHost = reference
         reference.attachPrimitive(rt.front)
       }
