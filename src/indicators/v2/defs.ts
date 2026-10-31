@@ -1,4 +1,5 @@
 /** The indicators carried over from btcAnalyzerV2, with V2's inputs, defaults and colors. */
+import { tmoLuxCall } from '../calls'
 import type { Drawing, IndicatorDef, InputDef, InputValue } from '../types'
 import type { Candle } from '../../data/types'
 import { calculateCmMacd, CM_COLORS, CM_RESOLUTIONS, cmCrosses, cmHistogramColor } from './cmMacd'
@@ -364,6 +365,7 @@ export const tmoLux: IndicatorDef = {
       drawings,
     }
   },
+  verdict: tmoLuxCall,
 }
 
 // ── RSI Divergence ──────────────────────────────────────────────────────────

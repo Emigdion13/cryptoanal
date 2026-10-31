@@ -13,6 +13,7 @@
  * else spans its own lows and highs, padded, and level lines appear once the scale reaches them.
  */
 import type { Candle } from '../data/types'
+import { barsAgo, SIGNAL_BARS } from '../indicators/calls'
 import type { Drawing, IndicatorDef, Output, PlotStyle, Verdict } from '../indicators/types'
 export type { Tone, Verdict } from '../indicators/types'
 
@@ -240,8 +241,6 @@ function placeDrawings(drawings: Drawing[], start: number, last: number, newest:
 
 // ── the call ─────────────────────────────────────────────────────────────
 
-/** A signal older than this many bars no longer makes the call: the lines do. */
-export const SIGNAL_BARS = 5
 const SIGNAL_WORD =/\b(buy|sell|bull|bear|long|short)\b/i
 const BULL_WORD = /\b(buy|bull|long)\b/i
 
@@ -269,9 +268,7 @@ export function verdictAt(input: ModelInput & { i: number }, model: FloatModel):
 
   const signal = lastSignal(out.drawings ?? [], Math.max(model.start, i - SIGNAL_BARS + 1), i)
   if (signal) {
-    const ago = i - signal.x
-    const when = ago <= 0 ? 'this bar' : ago === 1 ? '1 bar ago' : `${ago} bars ago`
-    return { text: `${signal.text} · ${when}`, tone: signal.up ? 'bull' : 'bear' }
+    return { text: `${signal.text} · ${barsAgo(i - signal.x)}`, tone: signal.up ? 'bull' : 'bear' }
   }
 
   if (lines.length >= 2) {

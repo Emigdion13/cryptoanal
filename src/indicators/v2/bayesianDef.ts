@@ -5,11 +5,13 @@
  * bodies between the fund line and its slow line, the yellow entry block across the bottom half,
  * and long / short circles on Prime (the script's barcolor, which a pane cannot paint).
  */
+import { bayesianCall } from '../calls'
 import type { Drawing, IndicatorDef, InputDef, InputValue } from '../types'
 import {
   BAYES_COLORS,
   BAYESIAN_NQQE_DEFAULTS as D,
   BAYESIAN_NQQE_SOURCES,
+  bayesianSideways,
   calculateBayesianNqqeBankfunds,
   isBayesianNqqeBankfundsSettings,
   type BayesianNqqeSettings,
@@ -130,9 +132,16 @@ export const bayesianNqqe: IndicatorDef = {
         nqqe: off(v.nqqe, s.showNqqe),
         long: off(v.longSignal, s.showSignals),
         short: off(v.shortSignal, s.showSignals),
+        // Not drawn: the script's sideways test, for the call.
+        sideways: v.prime.map((prime, k) => {
+          const up = v.probUp[k]
+          const down = v.probDown[k]
+          return prime === null || up === null || down === null ? NaN : bayesianSideways(prime, up, down, s.lowerThreshold) ? 1 : 0
+        }),
       },
       colors: { nqqe: v.nqqeColors, nqqeFill: v.nqqeColors.map((c) => alpha(c, 0.7)) },
       drawings,
     }
   },
+  verdict: bayesianCall,
 }

@@ -11,7 +11,7 @@ import { aggregateSeconds, parseInterval, type IntervalDef } from '../../src/dat
 import type { Candle } from '../../src/data/types'
 import { defaultInputs, defaultStyles, INDICATOR_BY_TYPE } from '../../src/indicators/catalog'
 import type { Drawing, IndicatorInstance, Output } from '../../src/indicators/types'
-import { SIGNAL_BARS } from '../../src/ui/floatingModel'
+import { SIGNAL_BARS } from '../../src/indicators/calls'
 import { computeContext, failedRead, readIndicator, type IndicatorRead } from './features'
 
 /** Bars a strict read computes over: enough for a 30-minute feed's 150 bars. */

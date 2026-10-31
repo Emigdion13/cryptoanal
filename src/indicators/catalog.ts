@@ -5,6 +5,7 @@ import { kalshiStrike } from './kalshiStrike'
 import { tuxEmaScalper } from './tuxDef'
 import { luxSrBreaks } from './luxSr'
 import { bayesianNqqe } from './v2/bayesianDef'
+import { atrCall, bbwCall, cmfCall, dmiCall, obvCall } from './calls'
 import { cmUltMacd, cmVixFix, msbZigZag, rsiDivergence, smartMoneyConcepts, tmoLux, tmoScalper, trendPressure, withDivergences } from './v2/defs'
 
 // TradingView's built-in palette.
@@ -465,6 +466,7 @@ const BUILT_IN: IndicatorDef[] = [
       { key: 'minus', title: '-DI', kind: 'line', color: ORANGE },
     ],
     compute: (bars, i) => directionalMovement(bars, n(i.diLength), n(i.adxSmoothing)),
+    verdict: dmiCall,
   },
   {
     type: 'aroon',
@@ -510,6 +512,7 @@ const BUILT_IN: IndicatorDef[] = [
     inputs: [len(14), { key: 'smoothing', label: 'Smoothing', type: 'select', default: 'RMA', options: ['RMA', 'SMA', 'EMA', 'WMA'] }],
     plots: [{ key: 'atr', title: 'ATR', kind: 'line', color: '#b71c1c' }],
     compute: (bars, i) => ({ values: { atr: ta.ma(i.smoothing as ta.MaType, ta.trueRange(bars), n(i.length)) } }),
+    verdict: atrCall,
   },
   {
     type: 'bbw',
@@ -524,6 +527,7 @@ const BUILT_IN: IndicatorDef[] = [
       const { basis, upper, lower } = bollinger(bars, i)
       return { values: { bbw: upper.map((u, k) => (100 * (u - lower[k])) / basis[k]) } }
     },
+    verdict: bbwCall,
   },
   {
     type: 'bbpb',
@@ -564,6 +568,7 @@ const BUILT_IN: IndicatorDef[] = [
         },
       }
     },
+    verdict: obvCall,
   },
   {
     type: 'mfi',
@@ -611,6 +616,7 @@ const BUILT_IN: IndicatorDef[] = [
       )
       return { values: { cmf: ta.sum(ad, l).map((v, k) => v / vol[k]) } }
     },
+    verdict: cmfCall,
   },
 ]
 
