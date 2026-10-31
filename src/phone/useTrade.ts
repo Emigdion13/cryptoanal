@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TradeEnv, TradeResult, TradeState } from '../trade/kalshiTrade'
 import { phoneFetch } from './auth'
 
-export type TradeRoute = 'buy' | 'sell-now' | 'target' | 'target/cancel' | 'auto-sell'
+export type TradeRoute = 'buy' | 'sell-now' | 'target' | 'target/cancel' | 'auto-sell' | 'arm' | 'disarm'
 
 /** The answer to the last tap: Kalshi's words, and how long the order took. */
 export interface TradeStatus {
@@ -36,6 +36,8 @@ export function useTrade(product: string) {
   const [busy, setBusy] = useState<string | null>(null)
   const [armed, setArmed] = useState<string | null>(null)
   const [status, setStatus] = useState<TradeStatus | null>(null)
+  // The computer's clock minus the phone's, ms: countdowns run on the computer's time.
+  const [skewMs, setSkewMs] = useState(0)
   const armTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const statusTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const statusId = useRef(0)
@@ -45,7 +47,9 @@ export function useTrade(product: string) {
     const source = new EventSource(`/api/trade/stream?${new URLSearchParams({ env, product })}`)
     source.onmessage = (event) => {
       try {
-        setState(JSON.parse(event.data) as TradeState)
+        const next = JSON.parse(event.data) as TradeState
+        setSkewMs(next.asOf - Date.now())
+        setState(next)
       } catch {
         // A torn message; the next one is whole.
       }
@@ -102,7 +106,7 @@ export function useTrade(product: string) {
     }
   }
 
-  return { env, setEnv, state, busy, armed, status, send }
+  return { env, setEnv, state, skewMs, busy, armed, status, send }
 }
 
 export type Trade = ReturnType<typeof useTrade>

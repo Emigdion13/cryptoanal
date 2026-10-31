@@ -16,8 +16,8 @@ import { TradeEngine } from './engine'
 import { TradeError } from './kalshi'
 import { KalshiKeyStore, KeyError } from './keys'
 
-/** What a signed-in phone may use. */
-const PHONE_ROUTES = new Set(['state', 'stream', 'history', 'buy', 'sell-now', 'target', 'target/cancel', 'auto-sell'])
+/** What a signed-in phone may use (the ones that change something are in server/phone.ts PHONE_WRITES too). */
+export const PHONE_ROUTES = new Set(['state', 'stream', 'history', 'buy', 'sell-now', 'target', 'target/cancel', 'auto-sell', 'arm', 'disarm'])
 /** How often the stream pushes at most, ms: a busy book moves many times a second. */
 const PUSH_MS = 120
 
@@ -119,6 +119,8 @@ export function createTradeApi(
     if (route === 'target') return json(res, 200, await engine.setTarget(env, body))
     if (route === 'target/cancel') return json(res, 200, await engine.cancelTarget(env, body))
     if (route === 'auto-sell') return json(res, 200, await engine.setAutoSell(env, body))
+    if (route === 'arm') return json(res, 200, await engine.arm(env, body))
+    if (route === 'disarm') return json(res, 200, await engine.disarm(env, body))
     throw new TradeError(404, 'Not found.', 'NOT_FOUND')
   }
 

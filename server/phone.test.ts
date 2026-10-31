@@ -10,7 +10,8 @@ import { createServer, request, type IncomingMessage, type Server } from 'node:h
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createPhoneApi, guardLocal, isPhoneOrigin, PHONE_LOCK_MS, PHONE_SESSION_MS, PhoneAccess } from './phone'
+import { createPhoneApi, guardLocal, isPhoneOrigin, PHONE_LOCK_MS, PHONE_SESSION_MS, PHONE_WRITES, PhoneAccess } from './phone'
+import { PHONE_ROUTES } from './trade/api'
 import { createWorkspaceApi } from './workspace'
 
 const dir = mkdtempSync(join(tmpdir(), 'cryptoanal-phone-'))
@@ -338,5 +339,13 @@ describe('the gate in front of the app', () => {
   it("the computer's own browser is unaffected", async () => {
     expect((await call('GET', '/api/workspace', { from: 'local' })).body).toMatchObject({ writable: true })
     expect((await call('GET', '/api/phone/session', { from: 'local' })).body).toMatchObject({ local: true, signedIn: true })
+  })
+})
+
+describe('the phone gate and the trade routes', () => {
+  it('lets through every change a phone may send to the trade API, and no other', () => {
+    const reads = new Set(['state', 'stream', 'history'])
+    const writes = [...PHONE_ROUTES].filter((route) => !reads.has(route)).map((route) => `/api/trade/${route}`)
+    expect([...PHONE_WRITES].sort()).toEqual(writes.sort())
   })
 })

@@ -16,6 +16,7 @@ import { defaults, SCALE_FIT_DEFAULTS, type ChartState, type Settings } from '..
 import { phoneFetch, PhoneRequestError } from './auth'
 import { HistoryIcon, PhoneHistory } from './PhoneHistory'
 import { IndicatorsIcon, PhoneIndicatorSheet, usePhoneIndicators } from './PhoneIndicators'
+import { NextRoundSheet, NextRoundTimer } from './PhoneNextRound'
 import { PhoneQuickTrade } from './PhoneQuickTrade'
 import { useTrade, type Trade } from './useTrade'
 
@@ -136,6 +137,8 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
   const trade = useTrade(chart?.symbol ?? 'BTC-USD')
   // The quick-trade circles are showing.
   const [quick, setQuick] = useState(false)
+  // The Next round sheet, opened from the timer beside the quick-trade button.
+  const [nextRound, setNextRound] = useState(false)
 
   // Two screens side by side (scroll snapping): History, and Charts where the page opens.
   const lanesRef = useRef<HTMLDivElement>(null)
@@ -229,6 +232,8 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
         />
       )}
       {quick && chart && lane === 'charts' && <PhoneQuickTrade trade={trade} />}
+      {chart && lane === 'charts' && <NextRoundTimer trade={trade} open={nextRound} onToggle={() => setNextRound(!nextRound)} />}
+      {nextRound && chart && lane === 'charts' && <NextRoundSheet trade={trade} onClose={() => setNextRound(false)} />}
       {chart && lane === 'charts' && (
         <button
           type="button"
@@ -425,7 +430,7 @@ function useCloseOnTapOutside(active: boolean, close: () => void) {
   useEffect(() => {
     if (!active) return
     let down: { x: number; y: number; id: number } | null = null
-    const inside = (target: EventTarget | null) => target instanceof Element && !!target.closest('.phone-tile, .phone-quick, .phone-quick-toggle')
+    const inside = (target: EventTarget | null) => target instanceof Element && !!target.closest('.phone-tile, .phone-quick, .phone-quick-toggle, .phone-next-timer, .phone-quick-pad-back')
     const onDown = (e: PointerEvent) => {
       down = e.isPrimary && !inside(e.target) ? { x: e.clientX, y: e.clientY, id: e.pointerId } : null
     }

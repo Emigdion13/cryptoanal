@@ -552,8 +552,60 @@ export interface TradeState {
   balance: number | null
   position: TradePosition | null
   targets: TradeTarget[]
+  /** The next-round buys of this environment: the one armed, then the last few finished. */
+  armed: ArmedBuy[]
   asOf: number
   message: string
+}
+
+/**
+ * btcAnalyzerV2's "Next round": a buy armed for the NEXT round's open. The computer sends it the
+ * moment that round opens, at no more than `maxMills`, because by the time a person can tap, the
+ * opening price has often run away.
+ */
+export interface ArmedBuy {
+  id: string
+  env: TradeEnv
+  product: string
+  outcome: TradeOutcome
+  /** The most it pays per contract, in mills (59¢ = 590). */
+  maxMills: number
+  /** The amount, in dollars; the contract count is sized at `maxMills`, fee included. */
+  dollars: number
+  count: number
+  /** How long what did not fill at once keeps waiting at `maxMills`; 0 = fill at once or never. */
+  waitSeconds: number
+  /** The round it is for, and when that round opens (unix ms). */
+  ticker: string
+  opensAt: number
+  state: 'armed' | 'sending' | 'waiting' | 'done' | 'missed' | 'failed' | 'canceled'
+  message: string
+  filled: number
+  avgFillMills: number | null
+}
+
+export const ARMED_WORKING: readonly ArmedBuy['state'][] = ['armed', 'sending', 'waiting']
+
+export interface NextRound {
+  ticker: string
+  /** Unix ms. */
+  opensAt: number
+  closesAt: number
+  bands: PriceBand[]
+  exchangeIndex: number
+}
+
+/** The round after the running one: the earliest listed round that has not opened yet. */
+export function pickNextRound(payload: unknown, nowSec: number): NextRound | null {
+  let best: NextRound | null = null
+  for (const row of kalshiMarketRows(payload)) {
+    const open = kalshiIsoSeconds(row.open_time)
+    const close = kalshiIsoSeconds(row.close_time)
+    if (typeof row.ticker !== 'string' || !row.ticker || open === null || close === null || open <= nowSec) continue
+    if (!best || open * 1000 < best.opensAt)
+      best = { ticker: row.ticker, opensAt: open * 1000, closesAt: close * 1000, bands: parseBands(row.price_ranges) ?? [...TAPERED_BANDS], exchangeIndex: exchangeIndexOf(row) }
+  }
+  return best
 }
 
 /** What the order routes answer. */

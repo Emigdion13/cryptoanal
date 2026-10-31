@@ -48,6 +48,8 @@ import {
   toTradeMarket,
   toV2Order,
   TRADE_ORDER_PREFIX,
+  pickNextRound,
+  type ArmedBuy,
   type OrderIntent,
   type TradeEnv,
   type TradeMarket,
@@ -86,6 +88,14 @@ const HOLDING_SHOWS_MS = 5_000
 /** A new resting order may take this long to be listed; until then it is not placed again. */
 const ORDER_SHOWS_MS = 3_000
 const TICK_MS = 500
+/** A next-round buy starts knocking this long before the open, ms: Kalshi takes it the moment it opens. */
+const ARM_EARLY_MS = 1_500
+/** It knocks again this often while Kalshi says the round is not open, ms. */
+const ARM_RETRY_EVERY_MS = 150
+/** And gives up this long after the open, ms. */
+const ARM_RETRY_MS = 10_000
+const ARM_DEFAULT_WAIT_S = 10
+const ARM_MAX_WAIT_S = 900
 
 interface Feed {
   product: string
@@ -148,6 +158,17 @@ interface WorkingTarget extends TradeTarget {
   placedAt?: number
 }
 
+interface ArmedJob {
+  entry: ArmedBuy
+  exchangeIndex: number
+  feeCoefficient: number
+  timers: ReturnType<typeof setTimeout>[]
+  /** Its order on Kalshi, while what did not fill waits. */
+  orderId?: string
+  /** The cash was moved back to the round's exchange once already. */
+  refunded?: boolean
+}
+
 /** What the phone and the file see of a working target: no server bookkeeping. */
 const shown = ({ product: _product, retryAt: _retryAt, startedAt: _startedAt, placedAt: _placedAt, ...target }: WorkingTarget): TradeTarget => target
 
@@ -174,6 +195,8 @@ export class TradeEngine {
   private series = new Map<string, { multiplier: number; makerFees: boolean; at: number }>()
   private targets = new Map<string, WorkingTarget>()
   private targetsDone: TradeTarget[] = []
+  private armedJobs = new Map<string, ArmedJob>()
+  private armedDone: ArmedBuy[] = []
   private listeners = new Set<(env: TradeEnv) => void>()
   private timer: ReturnType<typeof setInterval> | null = null
   private saving: Promise<void> = Promise.resolve()
@@ -536,7 +559,7 @@ export class TradeEngine {
     }
   }
 
-  private async submit(acc: Account, intent: OrderIntent): Promise<TradeResult> {
+  private async submit(acc: Account, intent: OrderIntent): Promise<TradeResult & { remaining: number; orderId?: string }> {
     const result = (await acc.rest.call('POST', '/portfolio/events/orders', { body: toV2Order(intent) })) as Record<string, unknown> | null
     const filled = Number(result?.fill_count ?? 0) || 0
     const remaining = Number(result?.remaining_count ?? 0) || 0
@@ -544,7 +567,7 @@ export class TradeEngine {
     const avgFillMills = filled > 0 && Number.isFinite(avgYes) && avgYes > 0 ? (intent.outcome === 'up' ? avgYes * 1000 : 1000 - avgYes * 1000) : null
     const message = fillMessage(intent, filled, remaining, avgFillMills)
     this.log(`[trade] ${acc.env} ${intent.action} ${count$(intent.count)} ${word(intent.outcome)} @ ${formatCents(intent.mills)} ${intent.ticker} → ${message}`)
-    return { ok: true, message, filled, avgFillMills }
+    return { ok: true, message, filled, avgFillMills, remaining, ...(typeof result?.order_id === 'string' ? { orderId: result.order_id } : {}) }
   }
 
   private cancelOrder(acc: Account, ticker: string, orderId: string): Promise<unknown> {
@@ -994,6 +1017,210 @@ export class TradeEngine {
     return this.saving
   }
 
+  // ── Next round ──────────────────────────────────────────────────────────────────────────────
+  // btcAnalyzerV2's "Next round": a buy armed now, sent by this computer the moment the next round
+  // opens, at no more than the cap. Kept in memory: a restart of the app drops it.
+
+  /** The next-round buys of an environment: the ones working, then the last few finished. */
+  armedFor(env: TradeEnv): ArmedBuy[] {
+    const working = [...this.armedJobs.values()].map((job) => ({ ...job.entry })).filter((e) => e.env === env)
+    return [...working, ...this.armedDone.filter((e) => e.env === env).slice(0, 3)]
+  }
+
+  private finishArmed(job: ArmedJob, state: ArmedBuy['state'], message: string): void {
+    if (this.armedJobs.get(job.entry.id) !== job) return
+    job.timers.forEach((timer) => clearTimeout(timer))
+    job.timers = []
+    job.entry.state = state
+    job.entry.message = message
+    this.armedJobs.delete(job.entry.id)
+    this.armedDone.unshift({ ...job.entry })
+    this.armedDone.length = Math.min(this.armedDone.length, 10)
+    this.log(`[trade] ${job.entry.env} next-round ${job.entry.ticker} → ${message}`)
+    this.notify(job.entry.env)
+  }
+
+  /**
+   * Arm a buy of `dollars` of Up or Down for the NEXT round: when it opens, a limit buy at
+   * `maxMills` goes out at once (again every 150 ms while Kalshi says the round is not open yet).
+   * What does not fill waits at `maxMills` for `waitSeconds`, then is canceled, so it only ever buys
+   * at or under the cap. The cash moves to the round's exchange now, so nothing has to at the open.
+   * One per environment: arming again replaces it.
+   */
+  async arm(env: TradeEnv, raw: Record<string, unknown>): Promise<TradeResult & { armed: ArmedBuy }> {
+    const started = Date.now()
+    this.requireTrading(env)
+    const { outcome, maxMills, dollars, waitSeconds } = raw
+    if (!isOutcome(outcome)) throw new TradeError(400, 'Choose Up or Down.', 'BAD_ORDER')
+    if (typeof dollars !== 'number' || !(dollars >= 1) || dollars > MAX_DOLLARS) throw new TradeError(400, `Buy between $1 and $${MAX_DOLLARS.toLocaleString('en-US')}.`, 'BAD_ORDER')
+    const product = typeof raw.product === 'string' ? raw.product : 'BTC-USD'
+    const series = KALSHI_SERIES[product]?.series
+    if (!series) throw new TradeError(404, 'Kalshi runs no 15-minute market on this coin.', 'NO_SERIES')
+    const wait = typeof waitSeconds === 'number' && Number.isFinite(waitSeconds) ? Math.max(0, Math.min(ARM_MAX_WAIT_S, Math.round(waitSeconds))) : ARM_DEFAULT_WAIT_S
+    const acc = this.accounts[env]
+    const nowSec = Math.floor(Date.now() / 1000)
+    const [listing, info] = await Promise.all([
+      // Rounds are listed days ahead; the next half hour holds the one opening next.
+      acc.rest.call('GET', `/markets?${new URLSearchParams({ series_ticker: series, min_close_ts: String(nowSec), max_close_ts: String(nowSec + 35 * 60), limit: '20' })}`, { authed: false }),
+      this.seriesInfo(acc, series),
+    ])
+    const next = pickNextRound(listing, nowSec)
+    if (!next) throw new TradeError(409, 'Kalshi has not listed the next round yet.', 'NO_NEXT_ROUND')
+    if (typeof maxMills !== 'number' || !onGrid(outcome, maxMills, priceTicks(next.bands)))
+      throw new TradeError(400, `${formatCents(Number(maxMills))} is not a price this market takes.`, 'BAD_PRICE')
+    const coefficient = TAKER_FEE * info.multiplier
+    const count = contractsFor(dollars, maxMills, coefficient)
+    if (count < 1) throw new TradeError(400, `$${dollars.toFixed(2)} does not buy one contract at ${formatCents(maxMills)}.`, 'BAD_ORDER')
+    const moved = await this.ensureFunds(acc, next.exchangeIndex, buyCostDollars(count, maxMills, coefficient))
+    for (const old of [...this.armedJobs.values()]) if (old.entry.env === env && old.entry.state === 'armed') this.finishArmed(old, 'canceled', 'Replaced by a new next-round buy')
+    const entry: ArmedBuy = {
+      id: `n-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      env,
+      product,
+      outcome,
+      maxMills,
+      dollars,
+      count,
+      waitSeconds: wait,
+      ticker: next.ticker,
+      opensAt: next.opensAt,
+      state: 'armed',
+      message: `Armed: buys ${count$(count)} ${word(outcome)} at up to ${formatCents(maxMills)} the moment the next round opens`,
+      filled: 0,
+      avgFillMills: null,
+    }
+    const job: ArmedJob = { entry, exchangeIndex: next.exchangeIndex, feeCoefficient: coefficient, timers: [] }
+    this.armedJobs.set(entry.id, job)
+    job.timers.push(setTimeout(() => void this.fireArmed(job), Math.max(0, next.opensAt - ARM_EARLY_MS - Date.now())))
+    this.log(`[trade] ${env} armed ${word(outcome)} ≤ ${formatCents(maxMills)} ×${count$(count)} for ${next.ticker} (opens ${new Date(next.opensAt).toISOString()})`)
+    this.notify(env)
+    const message = moved > 0 ? `Moved $${moved.toFixed(2)} to the crypto exchange · ${entry.message}` : entry.message
+    return { ok: true, message, armed: { ...entry }, ms: Date.now() - started }
+  }
+
+  private async fireArmed(job: ArmedJob): Promise<void> {
+    const { entry } = job
+    if (entry.state !== 'armed' || this.armedJobs.get(entry.id) !== job) return
+    const acc = this.accounts[entry.env]
+    entry.state = 'sending'
+    entry.message = 'Round opening: sending the buy…'
+    this.notify(entry.env)
+    const deadline = entry.opensAt + ARM_RETRY_MS
+    const intent: OrderIntent = {
+      ticker: entry.ticker,
+      outcome: entry.outcome,
+      action: 'buy',
+      mills: entry.maxMills,
+      count: entry.count,
+      timeInForce: entry.waitSeconds > 0 ? 'good_till_canceled' : 'immediate_or_cancel',
+      clientOrderId: newClientOrderId('next'),
+    }
+    for (;;) {
+      if (this.armedJobs.get(entry.id) !== job) return
+      try {
+        const result = await this.submit(acc, intent)
+        entry.filled = result.filled ?? 0
+        entry.avgFillMills = result.avgFillMills ?? null
+        const late = ((Date.now() - entry.opensAt) / 1000).toFixed(1)
+        if (entry.filled > 0) void this.armedBought(job)
+        if (result.remaining <= 0) return this.finishArmed(job, 'done', `Bought ${count$(entry.filled)} ${word(entry.outcome)} at ${formatCents(entry.avgFillMills)} avg, ${late} s after the open`)
+        if (intent.timeInForce === 'immediate_or_cancel' || !result.orderId)
+          return this.finishArmed(
+            job,
+            entry.filled > 0 ? 'done' : 'missed',
+            entry.filled > 0
+              ? `Bought ${count$(entry.filled)} of ${count$(entry.count)} ${word(entry.outcome)} at ${formatCents(entry.avgFillMills)} avg; no more at ${formatCents(entry.maxMills)} or less`
+              : `Not bought: ${word(entry.outcome)} opened above ${formatCents(entry.maxMills)}`,
+          )
+        job.orderId = result.orderId
+        entry.state = 'waiting'
+        entry.message = `${entry.filled > 0 ? `Bought ${count$(entry.filled)} at ${formatCents(entry.avgFillMills)} avg; ` : ''}${count$(result.remaining)} waiting at ${formatCents(entry.maxMills)} for ${entry.waitSeconds} s`
+        const orderId = result.orderId
+        job.timers.push(setTimeout(() => void this.closeArmed(job, orderId), Math.max(0, entry.opensAt + entry.waitSeconds * 1000 - Date.now())))
+        this.notify(entry.env)
+        return
+      } catch (error) {
+        const e = error instanceof TradeError ? error : new TradeError(500, error instanceof Error ? error.message : 'The buy failed.')
+        // The cash left the round's exchange since arming: move it back once, then go again.
+        if (/shard balance|exchange user not found|insufficient/i.test(e.message) && !job.refunded) {
+          job.refunded = true
+          try {
+            await this.ensureFunds(acc, job.exchangeIndex, buyCostDollars(entry.count, entry.maxMills, job.feeCoefficient))
+            continue
+          } catch (fundError) {
+            return this.finishArmed(job, 'failed', `Not bought: ${fundError instanceof Error ? fundError.message : e.message}`)
+          }
+        }
+        // Before the open Kalshi refuses it; keep knocking until the round takes it. A refusal that
+        // will not change (no money, a bad key) ends it.
+        const fatal = e.status === 401 || e.status === 403 || /balance|insufficient|funds/i.test(e.message)
+        if (fatal || Date.now() >= deadline) return this.finishArmed(job, 'failed', `Not bought: ${e.message}`)
+        await sleep(e.status === 429 ? 600 : ARM_RETRY_EVERY_MS)
+      }
+    }
+  }
+
+  /**
+   * Something filled: like every buy, it queues the round's auto-sell. The running round is read
+   * again first (the circles may still show the one that just closed).
+   */
+  private async armedBought(job: ArmedJob): Promise<void> {
+    const { entry } = job
+    const acc = this.accounts[entry.env]
+    const feed = this.feed(acc, entry.product)
+    for (let tries = 0; tries < 6 && feed.market?.ticker !== entry.ticker; tries++) {
+      feed.wantedAt = Date.now()
+      if (tries) await sleep(1_000)
+      await (feed.loading ?? (feed.loading = this.loadMarket(acc, feed)))
+    }
+    const market = feed.market
+    if (market?.ticker !== entry.ticker) return
+    this.startAutoSell(acc, feed, market, entry.outcome)
+    this.afterOrder(acc, entry.ticker)
+  }
+
+  /** The wait is over: cancel what did not fill, and say what the buy got. */
+  private async closeArmed(job: ArmedJob, orderId: string): Promise<void> {
+    const { entry } = job
+    if (this.armedJobs.get(entry.id) !== job) return
+    const acc = this.accounts[entry.env]
+    // Still resting: what filled is what is no longer in it. Gone: it filled while it waited.
+    let left = 0
+    try {
+      const resting = parseOrders(await acc.rest.call('GET', `/portfolio/orders?${new URLSearchParams({ ticker: entry.ticker, status: 'resting' })}`))
+      left = resting.find((o) => o.orderId === orderId)?.remaining ?? 0
+    } catch {
+      left = entry.count - entry.filled
+    }
+    if (left > 0) await this.cancelOrder(acc, entry.ticker, orderId).catch(() => undefined)
+    entry.filled = Math.max(entry.filled, Math.round((entry.count - left) * 100) / 100)
+    if (entry.filled > 0) void this.armedBought(job)
+    else this.afterOrder(acc, entry.ticker)
+    this.finishArmed(
+      job,
+      entry.filled > 0 ? 'done' : 'missed',
+      entry.filled > 0
+        ? left > 0
+          ? `Bought ${count$(entry.filled)} of ${count$(entry.count)} ${word(entry.outcome)} at up to ${formatCents(entry.maxMills)}; the rest was canceled after ${entry.waitSeconds} s`
+          : `Bought all ${count$(entry.filled)} ${word(entry.outcome)} at up to ${formatCents(entry.maxMills)}`
+        : `Not bought: ${word(entry.outcome)} stayed above ${formatCents(entry.maxMills)} for ${entry.waitSeconds} s`,
+    )
+  }
+
+  /** Cancel a next-round buy (and its waiting order, if it already went out). */
+  async disarm(env: TradeEnv, raw: Record<string, unknown>): Promise<TradeResult> {
+    const job = typeof raw.id === 'string' ? this.armedJobs.get(raw.id) : undefined
+    if (!job || job.entry.env !== env) throw new TradeError(404, 'That next-round buy is already over.', 'NO_ARMED')
+    if (job.entry.state === 'sending') throw new TradeError(409, 'It is being sent right now.', 'BUSY')
+    const orderId = job.entry.state === 'waiting' ? job.orderId : undefined
+    this.finishArmed(job, 'canceled', job.entry.filled > 0 ? `Canceled the rest; bought ${count$(job.entry.filled)}` : 'Canceled')
+    if (orderId) {
+      await this.cancelOrder(this.accounts[env], job.entry.ticker, orderId).catch(() => undefined)
+      this.afterOrder(this.accounts[env], job.entry.ticker)
+    }
+    return { ok: true, message: 'Next-round buy canceled' }
+  }
+
   // ── What the phone sees ─────────────────────────────────────────────────────────────────────
 
   /**
@@ -1074,6 +1301,7 @@ export class TradeEngine {
       balance: acc.balance?.total ?? null,
       position: held?.position ?? null,
       targets,
+      armed: this.armedFor(env),
       asOf: Date.now(),
       message: !KALSHI_SERIES[product] ? 'Kalshi runs no 15-minute market on this coin.' : (feed?.problem ?? 'Connecting…'),
     }
@@ -1082,6 +1310,8 @@ export class TradeEngine {
   close(): void {
     if (this.timer) clearInterval(this.timer)
     this.timer = null
+    for (const job of this.armedJobs.values()) job.timers.forEach((timer) => clearTimeout(timer))
+    this.armedJobs.clear()
     for (const acc of Object.values(this.accounts)) {
       acc.stream?.close()
       for (const feed of acc.feeds.values()) if (feed.reload) clearTimeout(feed.reload)

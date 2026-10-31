@@ -555,7 +555,15 @@ export async function readJson(req: IncomingMessage): Promise<Record<string, unk
 }
 
 /** The only changes a signed-in phone may send: the quick-trade circles' orders (server/trade/api.ts). */
-export const PHONE_WRITES = new Set(['/api/trade/buy', '/api/trade/sell-now', '/api/trade/target', '/api/trade/target/cancel'])
+export const PHONE_WRITES = new Set([
+  '/api/trade/buy',
+  '/api/trade/sell-now',
+  '/api/trade/target',
+  '/api/trade/target/cancel',
+  '/api/trade/auto-sell',
+  '/api/trade/arm',
+  '/api/trade/disarm',
+])
 
 /**
  * `/api/phone/*` (the phone's sign-in, its own indicators, and the computer's Phone access

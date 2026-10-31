@@ -819,6 +819,232 @@ button.phone-account:active {
   font-size: 15px;
   font-weight: 600;
 }
+/* Left of the quick-trade button: the time left in Kalshi's running round; a tap opens Next round. */
+.phone-next-timer {
+  position: fixed;
+  right: calc(50% + 38px);
+  bottom: calc(env(safe-area-inset-bottom) + 20px);
+  z-index: 16;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 76px;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--phone-line);
+  border-radius: 999px;
+  background: rgba(21, 26, 33, 0.96);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  color: var(--phone-text);
+  line-height: 1.1;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.phone-next-timer b {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.phone-next-timer small {
+  color: var(--phone-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.phone-next-timer:active {
+  transform: scale(0.94);
+}
+.phone-next-timer.is-on {
+  border-color: #6ab0ff;
+}
+.phone-next-timer.is-ending b {
+  color: #ff8a94;
+}
+.phone-next-timer.is-armed {
+  border-color: rgba(240, 180, 41, 0.7);
+  background: #2b2412;
+}
+.phone-next-timer.is-armed small {
+  color: #f0b429;
+}
+
+/* The Next round sheet: the keypad's sheet, with the armed buy's settings. */
+.phone-next {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 16px 16px calc(env(safe-area-inset-bottom) + 14px);
+  border-top: 1px solid var(--phone-line);
+  border-radius: 18px 18px 0 0;
+  background: #1a2029;
+}
+.phone-next-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.phone-next-head b {
+  font-size: 17px;
+}
+.phone-next-opens {
+  color: var(--phone-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.phone-next-kicker {
+  margin: 0;
+  color: var(--phone-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.phone-next-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.phone-next-side {
+  height: 44px;
+  border: 1px solid #2f3742;
+  border-radius: 10px;
+  background: #1c222b;
+  color: var(--phone-muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+.phone-next-side.is-up.is-on {
+  border-color: rgba(43, 185, 155, 0.7);
+  background: #10342c;
+  color: #4fe0c0;
+}
+.phone-next-side.is-down.is-on {
+  border-color: rgba(237, 103, 115, 0.7);
+  background: #3a1b22;
+  color: #ff8a94;
+}
+.phone-next-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.phone-next-label {
+  flex: 0 0 78px;
+  color: var(--phone-muted);
+  font-size: 12px;
+}
+.phone-next-stepper {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.phone-next-stepper b {
+  min-width: 52px;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.phone-next-stepper button {
+  width: 40px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--phone-text);
+  font-size: 20px;
+}
+.phone-next-stepper button:disabled {
+  opacity: 0.35;
+}
+.phone-next-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.phone-next-chips button,
+.phone-next-chips input {
+  height: 34px;
+  min-width: 46px;
+  padding: 0 10px;
+  border: 1px solid var(--phone-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--phone-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.phone-next-chips input {
+  width: 78px;
+  /* 16px or iOS zooms in on focus. */
+  font-size: 16px;
+}
+.phone-next-chips .is-on {
+  border-color: #6ab0ff;
+  color: #6ab0ff;
+}
+.phone-next-note {
+  margin: 0;
+  color: var(--phone-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.phone-next-note.is-warn,
+.phone-next-last.is-missed,
+.phone-next-last.is-failed {
+  color: #f0b429;
+}
+.phone-next-note.is-error {
+  color: #ff8a94;
+}
+.phone-next-note.is-ok,
+.phone-next-last.is-done {
+  color: var(--phone-up);
+}
+.phone-next-arm {
+  height: 48px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.phone-next-arm.is-up {
+  background: #10342c;
+  color: #4fe0c0;
+}
+.phone-next-arm.is-down {
+  background: #3a1b22;
+  color: #ff8a94;
+}
+.phone-next-arm.is-armed {
+  background: #3a2e10;
+  color: #f0b429;
+}
+.phone-next-arm:disabled {
+  opacity: 0.4;
+}
+.phone-next-active {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(240, 180, 41, 0.55);
+  border-radius: 12px;
+  background: #2b2412;
+  color: #f0b429;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.phone-next-active span {
+  flex: 1;
+}
+.phone-next-active button {
+  padding: 6px 12px;
+  border: 1px solid rgba(237, 103, 115, 0.6);
+  border-radius: 999px;
+  color: #ff8a94;
+  font-size: 12px;
+}
+
 /* Room for the last card above the quick-trade button, and above the circles while they show. */
 .phone.is-charts {
   padding-bottom: calc(env(safe-area-inset-bottom) + 84px);
