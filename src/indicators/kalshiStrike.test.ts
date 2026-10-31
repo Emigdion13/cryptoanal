@@ -35,6 +35,7 @@ describe('Kalshi Strike', () => {
         series: 'KXBTC15M',
         history: [{ ticker: 'a', start: T0, end: T0 + 900, strike: 98 }],
         current: { ticker: 'b', start: T0 + 900, end: T0 + 1800, strike: 102, yesBid: 0.7, yesAsk: 0.72, tieGoesUp: true },
+        basis: null,
         fetchedAt: 0,
         message: '',
       },
@@ -54,6 +55,19 @@ describe('Kalshi Strike', () => {
     expect(out.values.strike.slice(0, 15).every(Number.isNaN)).toBe(true)
     expect(out.values.strike.slice(15).every((v) => v === 102)).toBe(true)
     expect(out.drawings?.find((d) => d.type === 'line')).toEqual(expect.objectContaining({ x1: 0, y1: 102, extendRight: true }))
+  })
+
+  it('moves the line by how far the index runs over Coinbase, and says so', () => {
+    vi.useFakeTimers({ now: (T0 + 24 * 60 + 30) * 1000 })
+    state.value = { ...state.value, reply: { ...state.value.reply!, basis: { dollars: 1.5, samples: 16 } } }
+    const inst = createInstance('kalshiStrike')
+    const out = kalshiStrike.compute(bars, inst.inputs, inst.styles, ctx)
+    expect(out.values.strike.slice(15).every((v) => v === 100.5)).toBe(true)
+    const badge = out.drawings?.find((d) => d.type === 'text')
+    expect(badge && 'text' in badge && badge.text).toBe('▲ UP +4.50 · 05:30 · Yes 71¢ · index +1.50')
+    // Off: Kalshi's own number.
+    const raw = kalshiStrike.compute(bars, { ...inst.inputs, lineUp: false }, inst.styles, ctx)
+    expect(raw.values.strike.slice(15).every((v) => v === 102)).toBe(true)
   })
 
   it('says why instead of drawing a guessed strike', () => {

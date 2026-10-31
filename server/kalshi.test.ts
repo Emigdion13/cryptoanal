@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createKalshiApi, parseCurrent, parseHistory } from './kalshi'
+import { createKalshiApi, measureBasis, minuteAverages, parseCurrent, parseHistory } from './kalshi'
 
 const market = (open: string, close: string, strike: number, extra: Record<string, unknown> = {}) => ({
   ticker: `KXBTC15M-${open}`,
@@ -52,10 +52,25 @@ describe('Kalshi proxy', () => {
     const api = createKalshiApi(fetcher, () => Date.parse('2026-10-27T18:20:00Z'))
     const first = await api.strikeFor('BTC-USD')
     expect(first.current?.strike).toBe(80517.64)
+    // Coinbase's answer here is no candles: the strike still comes, unmoved.
+    expect(first.basis).toBeNull()
     expect(first.history).toHaveLength(2)
     expect(calls.filter((u) => u.startsWith('https://api.elections'))).toHaveLength(2)
     await api.strikeFor('BTC-USD')
-    expect(calls).toHaveLength(4)
+    expect(calls.filter((u) => u.includes('kalshi.com'))).toHaveLength(4)
+  })
+
+  it('measures how far the index runs over Coinbase, from the recent strikes', async () => {
+    const now = Date.parse('2026-10-27T18:20:00Z') / 1000
+    const windows = Array.from({ length: 6 }, (_, k) => ({ ticker: `w${k}`, start: now - 900 * (k + 1), end: now - 900 * k, strike: 1000 + k }))
+    // Coinbase's minute before each open: $10 under the strike, one minute $40 under.
+    const candles = windows.map((w, k) => {
+      const avg = w.strike - (k === 0 ? 40 : 10)
+      return [w.start - 60, avg - 1, avg + 1, avg, avg]
+    })
+    expect(measureBasis(windows, minuteAverages(candles), now - 4 * 3600)).toEqual({ dollars: 10, samples: 6 })
+    // Too few strikes in reach: not measured.
+    expect(measureBasis(windows, minuteAverages(candles), now - 1800)).toBeNull()
   })
 
   it('refuses coins Kalshi has no 15-minute market on', async () => {

@@ -5,7 +5,9 @@
  * strikes (a step line) and ± target lines are optional.
  *
  * The strike is Kalshi's own number (`floor_strike`, a 60-second CF Benchmarks average), never an
- * estimate from Coinbase candles: with no answer from Kalshi the chart says so instead.
+ * estimate from Coinbase candles: with no answer from Kalshi the chart says so instead. That index
+ * runs some dollars off Coinbase's price, so by default the line moves by the gap measured on the
+ * recent strikes: Coinbase's price on the line is then even odds.
  */
 import { KALSHI_WINDOW, kalshiState } from '../data/kalshi'
 import { formatCountdown, formatPrice } from '../format'
@@ -25,6 +27,7 @@ export const kalshiStrike: IndicatorDef = {
   external: true,
   inputs: [
     { key: 'showHistory', label: 'Show past windows', type: 'bool', default: false },
+    { key: 'lineUp', label: 'Line up with Coinbase (move by the index gap)', type: 'bool', default: true },
     { key: 'buffer', label: 'Target buffer ($)', type: 'float', default: 50, min: 0, max: 100000, step: 5, hideInTitle: true },
     { key: 'showBadge', label: 'Show UP/DOWN badge', type: 'bool', default: true },
     { key: 'showOdds', label: 'Show Kalshi Yes price', type: 'bool', default: true },
@@ -39,7 +42,11 @@ export const kalshiStrike: IndicatorDef = {
     const windows = new Map<number, number>()
     // Past windows only on request: by default the chart shows the strike that counts now.
     if (i.showHistory) for (const w of reply?.history ?? []) windows.set(w.start, w.strike)
-    const current = reply?.current ?? null
+    // In Coinbase's terms: the index's strike less how far the index runs over Coinbase.
+    const gap = i.lineUp !== false ? (reply?.basis?.dollars ?? 0) : 0
+    const live = reply?.current ?? null
+    const current = live ? { ...live, strike: live.strike - gap } : null
+    for (const [start, strike] of windows) windows.set(start, strike - gap)
     if (current) windows.set(current.start, current.strike)
 
     // Each bar takes the strike of the window running at its last moment (the newest bar: now).
@@ -64,11 +71,12 @@ export const kalshiStrike: IndicatorDef = {
         const digits = current.strike >= 100 ? 2 : current.strike >= 1 ? 4 : 6
         const mid = current.yesBid !== null && current.yesAsk !== null ? (current.yesBid + current.yesAsk) / 2 : (current.yesAsk ?? current.yesBid)
         const odds = i.showOdds && mid !== null ? ` · Yes ${Math.round(mid * 100)}¢` : ''
+        const moved = gap ? ` · index ${gap > 0 ? '+' : '−'}${formatPrice(Math.abs(gap), digits)}` : ''
         drawings.push({
           type: 'text',
           x: 'end',
           y: current.strike,
-          text: `${up ? '▲ UP' : '▼ DOWN'} ${diff >= 0 ? '+' : '−'}${formatPrice(Math.abs(diff), digits)} · ${formatCountdown(current.end - now)}${odds}`,
+          text: `${up ? '▲ UP' : '▼ DOWN'} ${diff >= 0 ? '+' : '−'}${formatPrice(Math.abs(diff), digits)} · ${formatCountdown(current.end - now)}${odds}${moved}`,
           color: '#ffffff',
           bg: up ? UP : DOWN,
           size: 11,

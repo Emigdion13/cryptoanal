@@ -6,13 +6,20 @@
  * The strike is Kalshi's own `floor_strike`: the 60-second average of the CF Benchmarks index
  * (BRTI for BTC) ending at the window's open — the number the market settles against, which no
  * Coinbase candle reproduces. Settled markets give every past window's strike and settlement.
+ *
+ * The index runs a few dollars off Coinbase (over it, mostly: $2–16 a day in late October 2026),
+ * so Coinbase sitting on the strike is not even odds. `basis` measures it: each recent strike
+ * against Coinbase's price over the same minute.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 
 const ORIGINS = ['https://external-api.kalshi.com', 'https://api.elections.kalshi.com']
 const API = '/trade-api/v2'
+const COINBASE = 'https://api.exchange.coinbase.com'
 export const WINDOW_SECONDS = 900
+/** The gap is measured over the strikes of this long back (Coinbase answers 300 minutes a read). */
+const BASIS_SECONDS = 4 * 3600
 
 /** Coinbase product → Kalshi 15-minute series (V2's list). */
 export const KALSHI_SERIES: Record<string, { series: string; digits: number }> = {
@@ -44,12 +51,21 @@ export interface KalshiCurrent extends KalshiWindow {
   tieGoesUp: boolean
 }
 
+/** How far the index runs over Coinbase. */
+export interface KalshiBasis {
+  /** Index minus Coinbase, in dollars (negative: under): the median over the recent strikes. */
+  dollars: number
+  samples: number
+}
+
 export interface KalshiStrikeReply {
   product: string
   series: string
   current: KalshiCurrent | null
   /** Settled windows, oldest first. */
   history: KalshiWindow[]
+  /** Null until measured (or with Coinbase unreachable). */
+  basis: KalshiBasis | null
   fetchedAt: number
   message: string
 }
@@ -113,6 +129,36 @@ export function parseHistory(payload: unknown, digits: number): KalshiWindow[] {
   return [...byStart.values()].sort((a, b) => a.start - b.start)
 }
 
+/**
+ * The index over Coinbase: each strike since `sinceSec` (a 60-second index average ending at its
+ * window's open) less Coinbase's average over that minute, `minutes` giving the 1-minute candle
+ * averages by start; the median, so one wild minute does not move it.
+ */
+export function measureBasis(windows: readonly KalshiWindow[], minutes: ReadonlyMap<number, number>, sinceSec: number): KalshiBasis | null {
+  const gaps: number[] = []
+  for (const w of windows) {
+    const coinbase = minutes.get(w.start - 60)
+    if (w.start >= sinceSec && coinbase !== undefined) gaps.push(w.strike - coinbase)
+  }
+  if (gaps.length < 4) return null
+  gaps.sort((a, b) => a - b)
+  const mid = gaps.length >> 1
+  const dollars = gaps.length % 2 ? gaps[mid] : (gaps[mid - 1] + gaps[mid]) / 2
+  return { dollars: Math.round(dollars * 100) / 100, samples: gaps.length }
+}
+
+/** Coinbase's 1-minute candles as [start, low, high, open, close, …] → each minute's average. */
+export function minuteAverages(payload: unknown): Map<number, number> {
+  const out = new Map<number, number>()
+  if (!Array.isArray(payload)) return out
+  for (const row of payload) {
+    if (!Array.isArray(row) || row.length < 5) continue
+    const [time, low, high, open, close] = row.map(Number)
+    if ([time, low, high, open, close].every(Number.isFinite)) out.set(time, (low + high + open + close) / 4)
+  }
+  return out
+}
+
 export function createKalshiApi(fetcher: typeof fetch = fetch, now: () => number = Date.now) {
   const cache = new Map<string, { at: number; value: unknown }>()
   const pending = new Map<string, Promise<unknown>>()
@@ -142,6 +188,24 @@ export function createKalshiApi(fetcher: typeof fetch = fetch, now: () => number
     return request
   }
 
+  const basisCache = new Map<string, { at: number; value: Promise<KalshiBasis | null> }>()
+  /** The gap, measured again once a minute (one Coinbase read). */
+  const basisFor = (product: string, strikes: readonly KalshiWindow[], nowSec: number): Promise<KalshiBasis | null> => {
+    const hit = basisCache.get(product)
+    if (hit && now() - hit.at < 60_000) return hit.value
+    const since = nowSec - BASIS_SECONDS
+    const params = new URLSearchParams({ granularity: '60', start: new Date((since - 120) * 1000).toISOString(), end: new Date(nowSec * 1000).toISOString() })
+    const value = (async () => {
+      const res = await fetcher(`${COINBASE}/products/${encodeURIComponent(product)}/candles?${params}`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) })
+      if (!res.ok) throw new Error(`Coinbase answered ${res.status}`)
+      return measureBasis(strikes, minuteAverages(await res.json()), since)
+    })()
+    // A failed read is tried again on the next poll, not a minute later.
+    value.catch(() => basisCache.get(product)?.value === value && basisCache.delete(product))
+    basisCache.set(product, { at: now(), value })
+    return value
+  }
+
   const strikeFor = async (product: string): Promise<KalshiStrikeReply> => {
     const feed = KALSHI_SERIES[product]
     if (!feed) throw Object.assign(new Error('Kalshi runs no 15-minute market on this pair.'), { status: 404 })
@@ -161,11 +225,13 @@ export function createKalshiApi(fetcher: typeof fetch = fetch, now: () => number
       problems.push(error instanceof Error ? error.message : String(error))
     }
     if (problems.length && !current && !history.length) throw new Error(problems[0])
+    const strikes = current ? [...history, current] : history
     return {
       product,
       series: feed.series,
       current,
       history,
+      basis: await basisFor(product, strikes, nowSec).catch(() => null),
       fetchedAt: now(),
       message: problems[0] ?? (current ? `Kalshi ${feed.series}` : 'Kalshi has not published this window’s strike yet.'),
     }
