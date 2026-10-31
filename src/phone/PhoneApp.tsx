@@ -72,6 +72,7 @@ function Brand() {
   )
 }
 
+/** V2's lock screen: Face ID when this phone has it, else six dots and a keypad. */
 function SignIn({ session, onDone }: { session: PhoneSession; onDone: () => void }) {
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -94,7 +95,13 @@ function SignIn({ session, onDone }: { session: PhoneSession; onDone: () => void
       setBusy(false)
     }
   }
-  const submit = (value: string) => value.length === 6 && void run(() => signInWithPasscode(value))
+  const press = (digit: string) => {
+    if (busy) return
+    setError(null)
+    const next = (code + digit).slice(0, 6)
+    setCode(next)
+    if (next.length === 6) void run(() => signInWithPasscode(next))
+  }
 
   return (
     <div className="phone-center">
@@ -104,25 +111,31 @@ function SignIn({ session, onDone }: { session: PhoneSession; onDone: () => void
           Sign in with Face ID
         </button>
       )}
-      <label className="phone-code">
-        <span>{faceId ? 'Or enter the passcode' : 'Passcode'}</span>
-        <input
-          autoFocus={!faceId}
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          pattern="[0-9]*"
-          maxLength={6}
-          value={code}
-          disabled={busy}
-          onChange={(e) => {
-            const v = e.target.value.replace(/\D/g, '').slice(0, 6)
-            setCode(v)
-            submit(v)
-          }}
-        />
-      </label>
-      {error && <p className="phone-error">{error}</p>}
-      <p className="phone-note phone-dim">Set on the computer in ⚙ → Phone access.</p>
+      <p className="phone-note phone-dim">{faceId ? 'or enter your passcode' : 'Enter your passcode'}</p>
+      <div className="phone-dots" aria-label={`${code.length} of 6 digits entered`}>
+        {Array.from({ length: 6 }, (_, i) => (
+          <span key={i} className={i < code.length ? 'on' : undefined} />
+        ))}
+      </div>
+      <div className="phone-keypad">
+        {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+          <button key={d} onClick={() => press(d)} disabled={busy}>
+            {d}
+          </button>
+        ))}
+        <span />
+        <button onClick={() => press('0')} disabled={busy}>
+          0
+        </button>
+        <button className="plain" aria-label="Delete a digit" onClick={() => setCode(code.slice(0, -1))} disabled={busy || !code}>
+          <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round">
+            <path d="M9 5h11v14H9l-6-7z M12 9.5l5 5M17 9.5l-5 5" />
+          </svg>
+        </button>
+      </div>
+      <p className={error ? 'phone-error' : 'phone-note phone-dim'} role="status">
+        {error ?? 'Set on the computer in ⚙ → Phone access.'}
+      </p>
     </div>
   )
 }

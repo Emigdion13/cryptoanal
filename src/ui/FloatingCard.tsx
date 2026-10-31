@@ -243,9 +243,21 @@ export function FloatingCard({ inst, def, engine, legend, title, context, interv
   )
 }
 
-/** Levels, fills, histograms, lines, the indicator's own drawings and the cursor. */
-function Plot({ model, y, cursor, clipId }: { model: FloatModel; y: (v: number) => number; cursor: number | null; clipId: string }) {
-  const slot = FLOAT_PLOT.width / Math.max(1, model.count)
+/** Levels, fills, histograms, lines, the indicator's own drawings and the cursor (the phone's cards draw it wider). */
+export function Plot({
+  model,
+  y,
+  cursor,
+  clipId,
+  size = FLOAT_PLOT,
+}: {
+  model: FloatModel
+  y: (v: number) => number
+  cursor: number | null
+  clipId: string
+  size?: { width: number; height: number }
+}) {
+  const slot = size.width / Math.max(1, model.count)
   const x = (k: number) => k * slot + slot / 2
   const barWidth = Math.min(11, Math.max(1.5, slot * 0.66))
   const base = y(Math.min(model.domain.max, Math.max(model.domain.min, 0)))
@@ -257,7 +269,7 @@ function Plot({ model, y, cursor, clipId }: { model: FloatModel; y: (v: number) 
         <line
           key={l.value}
           x1={0}
-          x2={FLOAT_PLOT.width}
+          x2={size.width}
           y1={y(l.value)}
           y2={y(l.value)}
           stroke={l.color}
@@ -265,7 +277,7 @@ function Plot({ model, y, cursor, clipId }: { model: FloatModel; y: (v: number) 
           opacity={0.7}
         />
       ))}
-      {model.centered && <line x1={0} x2={FLOAT_PLOT.width} y1={y(0)} y2={y(0)} stroke="#787b86" opacity={0.35} />}
+      {model.centered && <line x1={0} x2={size.width} y1={y(0)} y2={y(0)} stroke="#787b86" opacity={0.35} />}
       {model.fills.map((f, n) =>
         f.from.map((a0, k) => {
           const a1 = f.from[k + 1]
@@ -337,7 +349,7 @@ function Plot({ model, y, cursor, clipId }: { model: FloatModel; y: (v: number) 
       })}
       {cursor !== null && (
         <g className="float-cursor">
-          <line x1={x(cursor)} x2={x(cursor)} y1={2} y2={FLOAT_PLOT.height - 2} />
+          <line x1={x(cursor)} x2={x(cursor)} y1={2} y2={size.height - 2} />
           {model.lines
             .filter((l) => l.kind !== 'dots' && l.values[cursor] !== null)
             .map((l) => (

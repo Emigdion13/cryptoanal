@@ -1,30 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChartEngine, type LegendState, type PaneRect } from '../chart/ChartEngine'
+import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { ChartEngine, type LegendState } from '../chart/ChartEngine'
 import { granularityFor, parseInterval } from '../data/intervals'
 import { watchKalshi } from '../data/kalshi'
-import { describe, getProduct, useCatalog } from '../data/products'
-import { defaultInputs, INDICATOR_BY_TYPE } from '../indicators/catalog'
-import type { IndicatorInstance } from '../indicators/types'
+import { getProduct, useCatalog } from '../data/products'
+import { formatPrice, formatVolume } from '../format'
+import { defaultInputs, INDICATOR_BY_TYPE, instanceTitle } from '../indicators/catalog'
+import type { IndicatorDef, IndicatorInstance } from '../indicators/types'
 import type { UserDrawing } from '../drawings/types'
 import { useChartData } from '../useChartData'
 import { CoinLogo } from '../ui/common'
-import { IndicatorRow, MainLegend } from '../ui/Legend'
+import { Plot } from '../ui/FloatingCard'
+import { buildModel, verdictAt } from '../ui/floatingModel'
 import { LAYOUT_BY_ID } from '../ui/layouts'
-import { defaults, SCALE_FIT_DEFAULTS, STATUS_LINE_DEFAULTS, type ChartState, type Settings } from '../ui/settings'
+import { defaults, SCALE_FIT_DEFAULTS, type ChartState, type Settings } from '../ui/settings'
 import { phoneFetch, PhoneRequestError } from './auth'
 
 /** How often the phone rereads the desktop's workspace, to follow its symbol, interval and indicators. */
 const FOLLOW_MS = 15_000
-/** Each indicator's block, under the price block. */
-const PANE_PX = 150
-/** The time axis under the last block. */
-const AXIS_PX = 28
-const NO_ACTIONS = { onToggle: () => {}, onSettings: () => {}, onRemove: () => {}, onFloat: () => {} }
+/** The bars an indicator card holds: about what the price card shows at its width. */
+const CARD_BARS = 60
+/** An indicator card's plot, in svg units (it is drawn at the card's width). */
+const CARD_PLOT = { width: 340, height: 120, padTop: 10, padBottom: 10 }
+/** The cards' background (phone.css), under the price chart too. */
+const CARD_BG = '#151a21'
 
 interface Desktop {
   charts: ChartState[]
   active: number
-  statusLine: Settings['statusLine']
   scaleFit: Settings['scaleFit']
   /** Each symbol's drawings, unless the desktop hides them. */
   drawings: Settings['drawings']
@@ -39,7 +41,6 @@ function readDesktop(settings: Partial<Settings> | null): Desktop {
   return {
     charts,
     active: Math.min(Math.max(0, settings?.active ?? 0), charts.length - 1),
-    statusLine: { ...STATUS_LINE_DEFAULTS, ...settings?.statusLine },
     scaleFit: { ...SCALE_FIT_DEFAULTS, ...settings?.scaleFit },
     drawings: settings?.drawingPrefs?.hidden ? {} : (settings?.drawings ?? {}),
   }
@@ -85,10 +86,10 @@ function useDesktop(onSignedOut: () => void) {
 }
 
 /**
- * V2's charts screen for this app: the desktop chart's candles and overlays on top, then every
- * indicator with a pane of its own as a block under it (floating ones too), all on the same bars,
- * in one scrolling page. Swipe sideways to scroll back in time, pinch to zoom, swipe up and down
- * to scroll the page.
+ * V2's charts screen for this app: a sticky header with the symbol, the desktop's charts as tabs,
+ * then cards — the price with the desktop's overlays and drawings, and one card per indicator that
+ * has a pane of its own (floating ones too), each with its call and its values. Touch the price
+ * chart to read a bar: the cards follow it. Everything follows the desktop's workspace.
  */
 export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean; onSignOut: () => void; onSignedOut: () => void }) {
   const { desktop, problem } = useDesktop(onSignedOut)
@@ -99,11 +100,22 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
   return (
     <div className="phone">
       <header className="phone-head">
-        {chart ? <ChartTitle chart={chart} /> : <span className="phone-title">CryptoAnal</span>}
+        {chart ? (
+          <span className="phone-title">
+            <CoinLogo symbol={chart.symbol.split('-')[0]} size={22} />
+            <b>{chart.symbol.replace('-', '/')}</b>
+            <span className="phone-chip">{intervalLabel(chart.interval)}</span>
+          </span>
+        ) : (
+          <span className="phone-title">
+            <b>CryptoAnal</b>
+          </span>
+        )}
         <span className="phone-spacer" />
+        <span className="phone-note phone-dim">{desktop ? 'desktop · live' : 'connecting…'}</span>
         {!local && (
-          <button className="phone-link" onClick={onSignOut}>
-            Sign out
+          <button className="phone-icon-btn" onClick={onSignOut} title="Sign out" aria-label="Sign out">
+            <SignOutIcon />
           </button>
         )}
       </header>
@@ -111,14 +123,14 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
         <nav className="phone-tabs">
           {desktop.charts.map((c, k) => (
             <button key={k} className={k === index ? 'on' : undefined} onClick={() => setPicked(k)}>
-              {c.symbol.replace('-USD', '')} · {intervalLabel(c.interval)}
+              {c.symbol.split('-')[0]} · {intervalLabel(c.interval)}
             </button>
           ))}
         </nav>
       )}
       {problem && <div className="phone-problem">{problem}</div>}
       {chart && desktop ? (
-        <ChartStack chart={chart} statusLine={desktop.statusLine} scaleFit={desktop.scaleFit} drawings={desktop.drawings[chart.symbol]} />
+        <ChartCards key={index} chart={chart} scaleFit={desktop.scaleFit} drawings={desktop.drawings[chart.symbol]} />
       ) : (
         !problem && <div className="phone-wait">Reading the desktop's chart…</div>
       )}
@@ -131,59 +143,35 @@ function intervalLabel(id: string): string {
   return iv ? (iv.intraday ? iv.label : `1${iv.label}`) : id
 }
 
-function ChartTitle({ chart }: { chart: ChartState }) {
-  const base = chart.symbol.split('-')[0]
-  return (
-    <span className="phone-title">
-      <CoinLogo symbol={base} size={20} />
-      <b>{chart.symbol}</b>
-      <span className="phone-dim">{intervalLabel(chart.interval)}</span>
-    </span>
-  )
-}
-
-function ChartStack({
-  chart,
-  statusLine,
-  scaleFit,
-  drawings,
-}: {
-  chart: ChartState
-  statusLine: Desktop['statusLine']
-  scaleFit: Desktop['scaleFit']
-  drawings: UserDrawing[] | undefined
-}) {
+function ChartCards({ chart, scaleFit, drawings }: { chart: ChartState; scaleFit: Desktop['scaleFit']; drawings: UserDrawing[] | undefined }) {
   const catalog = useCatalog()
   const product = getProduct(catalog, chart.symbol)
   const interval = parseInterval(chart.interval)
   const hostRef = useRef<HTMLDivElement>(null)
   const [engine, setEngine] = useState<ChartEngine | null>(null)
   const [legend, setLegend] = useState<LegendState | null>(null)
-  const [panes, setPanes] = useState<PaneRect[]>([])
-  const [collapsed, setCollapsed] = useState(false)
 
-  // Every shown indicator; one floating on the desktop gets its own block here.
+  // Every shown indicator. The ones with a pane of their own are computed but not drawn on the
+  // chart (as a floating window is): each gets a card instead.
   const indicators = useMemo<IndicatorInstance[]>(
     () =>
       chart.indicators
         .filter((i) => !i.hidden && INDICATOR_BY_TYPE.has(i.type))
-        .map((i) => (i.floating?.open ? { ...i, floating: { ...i.floating, open: false } } : i)),
+        .map((i) => (INDICATOR_BY_TYPE.get(i.type)!.overlay ? i : { ...i, floating: { ...i.floating, open: true } })),
     [chart.indicators],
   )
-  const [overlays, blocks] = useMemo(
-    () => [indicators.filter((i) => INDICATOR_BY_TYPE.get(i.type)!.overlay), indicators.filter((i) => !INDICATOR_BY_TYPE.get(i.type)!.overlay)],
-    [indicators],
-  )
-  const [mainPx] = useState(() => Math.round(Math.max(300, Math.min(480, window.innerHeight * 0.55))))
-  const height = mainPx + blocks.length * PANE_PX + AXIS_PX
-  const sizes = useMemo(() => Object.fromEntries([['main', mainPx], ...blocks.map((i) => [i.id, PANE_PX])]), [mainPx, blocks])
+  const overlays = indicators.filter((i) => INDICATOR_BY_TYPE.get(i.type)!.overlay)
+  const cards = indicators.filter((i) => !INDICATOR_BY_TYPE.get(i.type)!.overlay)
+  const [chartPx] = useState(() => Math.round(Math.max(280, Math.min(460, window.innerHeight * 0.5))))
 
   useEffect(() => {
     const e = new ChartEngine(hostRef.current!)
-    const offs = [e.on('legend', setLegend), e.on('panes', setPanes)]
+    e.setIndicatorLabels(false)
+    e.setBackground(CARD_BG)
+    const off = e.on('legend', setLegend)
     setEngine(e)
     return () => {
-      offs.forEach((off) => off())
+      off()
       e.destroy()
     }
   }, [])
@@ -195,7 +183,6 @@ function ChartStack({
   // Drawn on the desktop; the phone only shows them.
   useEffect(() => engine?.setDrawings(drawings ?? []), [engine, drawings])
   useEffect(() => engine?.setProduct(product.id), [engine, product.id])
-  useEffect(() => engine?.setPaneSizes(sizes), [engine, sizes])
   useEffect(() => engine?.setIndicators(indicators), [engine, indicators])
   const usesKalshi = indicators.some((i) => i.type === 'kalshiStrike')
   useEffect(() => {
@@ -215,32 +202,150 @@ function ChartStack({
   }, [indicators, interval])
   const { status } = useChartData(engine, product, chart.interval, feedGranularities)
 
+  const bar = legend?.bar
+  const change = bar && legend.prevClose ? bar.close - legend.prevClose : null
+  const tone = change === null ? '' : change >= 0 ? 'is-up' : 'is-down'
+  const price = (v: number) => formatPrice(v, product.precision)
+
   return (
-    <div className="phone-chart" style={{ height }}>
-      <div className="chart-host" ref={hostRef} />
-      <MainLegend
-        status={statusLine}
-        product={product}
-        description={describe(catalog, product)}
-        interval={interval}
-        state={legend}
-        engine={engine}
-        overlays={overlays}
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        readOnly
-        {...NO_ACTIONS}
-      />
-      {blocks.map((inst, k) => {
-        const rect = panes[k + 1]
-        if (!rect) return null
-        return (
-          <div key={inst.id} className="legend pane-legend" style={{ top: rect.top + 4 }}>
-            <IndicatorRow inst={inst} status={statusLine} product={product} engine={engine} state={legend} readOnly {...NO_ACTIONS} />
-          </div>
-        )
-      })}
-      {status === 'error' && <div className="chart-toast">Can't reach Coinbase — retrying…</div>}
-    </div>
+    <main className="phone-cards">
+      <section className="phone-card">
+        <header className="phone-card-head">
+          <span className="phone-card-title">
+            Price
+            {overlays.length > 0 && (
+              <span className="phone-card-name phone-dim">{overlays.map((i) => INDICATOR_BY_TYPE.get(i.type)!.short).join(' + ')}</span>
+            )}
+          </span>
+          {bar && (
+            <span className={`phone-price ${tone}`}>
+              <b>{price(bar.close)}</b>
+              {change !== null && legend.prevClose ? (
+                <small>
+                  {change >= 0 ? '+' : ''}
+                  {((change / legend.prevClose) * 100).toFixed(2)}%
+                </small>
+              ) : null}
+            </span>
+          )}
+        </header>
+        <div className="phone-ohlc">
+          {bar ? (
+            <>
+              <span>O {price(bar.open)}</span>
+              <span>H {price(bar.high)}</span>
+              <span>L {price(bar.low)}</span>
+              <span>C {price(bar.close)}</span>
+              <span className="phone-dim">{legend.live ? 'live' : 'bar'}</span>
+            </>
+          ) : (
+            <span className="phone-dim">Loading candles…</span>
+          )}
+        </div>
+        <div className="phone-price-chart" style={{ height: chartPx }}>
+          <div className="chart-host" ref={hostRef} />
+          {status === 'error' && <div className="chart-toast">Can't reach Coinbase — retrying…</div>}
+        </div>
+      </section>
+      {engine &&
+        cards.map((inst) => {
+          const def = INDICATOR_BY_TYPE.get(inst.type)!
+          return <IndicatorCard key={inst.id} inst={inst} def={def} engine={engine} legend={legend} />
+        })}
+    </main>
   )
 }
+
+/**
+ * One indicator as a card, like V2's: its name and the call it is read for, the last bars of what
+ * its pane would plot, and its values. Touch the plot (or the price chart) to read another bar.
+ */
+function IndicatorCard({ inst, def, engine, legend }: { inst: IndicatorInstance; def: IndicatorDef; engine: ChartEngine; legend: LegendState | null }) {
+  const [touchBar, setTouchBar] = useState<number | null>(null)
+  const clipId = `phone-clip-${useId().replace(/:/g, '')}`
+  const snap = engine.indicatorSnapshot(inst.id)
+  if (!snap || !snap.bars.length) return null
+
+  const newest = snap.bars.length - 1
+  const input = { def, out: snap.out, bars: snap.bars, styles: inst.styles, end: newest, count: CARD_BARS }
+  const model = buildModel(input)
+  const end = model.start + model.count - 1
+  const chartBar = legend && !legend.live ? legend.index : null
+  const readIndex = touchBar !== null ? model.start + touchBar : (chartBar ?? end)
+  const cursor = readIndex >= model.start && readIndex <= end && (touchBar !== null || chartBar !== null) ? readIndex - model.start : null
+  const verdict = verdictAt({ ...input, i: readIndex }, model)
+  const values = engine.indicatorValues(inst.id, readIndex)
+  const readouts = def.plots
+    .filter((p) => p.kind !== 'value' && p.kind !== 'dots')
+    .map((p) => {
+      const v = values.find((x) => x.key === p.key)
+      return v && { key: p.key, label: p.title, text: v.text, color: v.color }
+    })
+    .filter((r): r is NonNullable<typeof r> => !!r)
+    .slice(0, 4)
+  const accent = model.lines[0]?.color ?? model.histograms[0]?.colors.at(-1) ?? '#2962ff'
+
+  const plotH = CARD_PLOT.height - CARD_PLOT.padTop - CARD_PLOT.padBottom
+  const y = (v: number) => CARD_PLOT.padTop + ((model.domain.max - v) / (model.domain.max - model.domain.min || 1)) * plotH
+  const scale = (v: number) => (def.format === 'volume' ? formatVolume(v) : axisLabel(v))
+  const touch = (e: ReactPointerEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setTouchBar(Math.min(model.count - 1, Math.max(0, Math.floor(((e.clientX - rect.left) / rect.width) * model.count))))
+  }
+
+  return (
+    <section className={`phone-card is-${verdict.tone}`}>
+      <header className="phone-card-head">
+        <span className="phone-card-title">
+          <span className="phone-dot" style={{ background: accent }} />
+          <span className="phone-card-name" title={instanceTitle(def, inst)}>
+            {def.short}
+          </span>
+        </span>
+        <span className={`phone-verdict tone-${verdict.tone}`}>{verdict.text}</span>
+      </header>
+      <div className="phone-plot">
+        <svg
+          viewBox={`0 0 ${CARD_PLOT.width} ${CARD_PLOT.height}`}
+          preserveAspectRatio="none"
+          onPointerDown={touch}
+          onPointerMove={(e) => (e.pointerType === 'mouse' || e.buttons) && touch(e)}
+          onPointerLeave={() => setTouchBar(null)}
+          onPointerUp={(e) => e.pointerType !== 'mouse' && setTouchBar(null)}
+        >
+          <defs>
+            <clipPath id={clipId}>
+              <rect width={CARD_PLOT.width} height={CARD_PLOT.height} />
+            </clipPath>
+          </defs>
+          <Plot model={model} y={y} cursor={cursor} clipId={clipId} size={CARD_PLOT} />
+        </svg>
+        <div className="phone-axis">
+          <span>{scale(model.domain.max)}</span>
+          <span>{scale(model.domain.min)}</span>
+        </div>
+      </div>
+      <div className="phone-readouts">
+        {readouts.map((r) => (
+          <span key={r.key}>
+            <small>{r.label}</small>
+            <b style={{ color: r.color }}>{r.text}</b>
+          </span>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/** Scale, not measurement: a card of MACD needs no four decimals. */
+function axisLabel(value: number): string {
+  if (value === 0) return '0'
+  const abs = Math.abs(value)
+  return formatPrice(value, abs >= 100 ? 0 : abs >= 1 ? 1 : abs >= 0.01 ? 3 : 5)
+}
+
+const SignOutIcon = () => (
+  <svg width={20} height={20} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 4H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M12 6l4 4-4 4M16 10H8" />
+  </svg>
+)

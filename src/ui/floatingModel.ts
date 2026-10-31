@@ -167,8 +167,13 @@ export function buildModel({ def, out, bars, styles, end, count }: ModelInput): 
     colors: f.colorsKey && out.colors?.[f.colorsKey] ? Array.from({ length: n }, (_, k) => out.colors![f.colorsKey!][start + k]) : undefined,
   }))
 
+  // The levels and the bands filled between them stay in view, as the pane's scale keeps them.
+  const bounds = [
+    ...(def.levels ?? []).map((l) => l.value),
+    ...(def.fills ?? []).flatMap((f) => [f.from, f.to]).filter((v): v is number => typeof v === 'number'),
+  ]
   const { domain, centered } = paneDomain(
-    [...lines.map((l) => l.values), ...histograms.map((h) => h.values)],
+    [...lines.map((l) => l.values), ...histograms.map((h) => h.values), ...(n && bounds.length ? [bounds] : [])],
     histograms.length > 0,
   )
   const levels = (def.levels ?? [])

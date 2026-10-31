@@ -157,6 +157,8 @@ export class ChartEngine {
   readonly chart: IChartApi
   private main: ISeriesApi<SeriesType> | null = null
   private fit = { price: true, indicators: true }
+  /** Indicators' last values tagged on the price axis (the phone leaves them off). */
+  private indicatorLabels = true
   private type: ChartType = 'candles'
   private bars: Candle[] = []
   private ha: Candle[] = []
@@ -564,7 +566,7 @@ export class ChartEngine {
         const common = {
           priceScaleId: def.ownScale ? `ind-${inst.id}` : 'right',
           // The volume scale has no axis; its label is drawn by paintLabels.
-          lastValueVisible: !def.ownScale,
+          lastValueVisible: !def.ownScale && this.indicatorLabels,
           priceLineVisible: false,
           priceFormat: this.indicatorFormat(def),
           visible: !inst.hidden && style?.visible !== false,
@@ -752,6 +754,17 @@ export class ChartEngine {
     })
     // The custom label shows prices; in percent mode the engine's own label shows percents.
     this.main?.applyOptions({ lastValueVisible: mode === 'percent' })
+  }
+
+  /** The chart's background, for a page that is not TradingView's black (the phone's cards). */
+  setBackground(color: string) {
+    this.chart.applyOptions({ layout: { background: { type: ColorType.Solid, color } } })
+  }
+
+  setIndicatorLabels(on: boolean) {
+    if (on === this.indicatorLabels) return
+    this.indicatorLabels = on
+    for (const rt of this.runtimes) if (!rt.def.ownScale) for (const s of rt.series.values()) s.applyOptions({ lastValueVisible: on })
   }
 
   /**
