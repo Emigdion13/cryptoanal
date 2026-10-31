@@ -5,7 +5,7 @@ import { kalshiStrike } from './kalshiStrike'
 import { tuxEmaScalper } from './tuxDef'
 import { luxSrBreaks } from './luxSr'
 import { bayesianNqqe } from './v2/bayesianDef'
-import { cmUltMacd, msbZigZag, rsiDivergence, smartMoneyConcepts, tmoLux, tmoScalper, withDivergences } from './v2/defs'
+import { cmUltMacd, cmVixFix, msbZigZag, rsiDivergence, smartMoneyConcepts, tmoLux, tmoScalper, trendPressure, withDivergences } from './v2/defs'
 
 // TradingView's built-in palette.
 const BLUE = '#2962ff'
@@ -621,6 +621,8 @@ export const INDICATORS: IndicatorDef[] = [
   rsiDivergence,
   tmoScalper,
   tmoLux,
+  cmVixFix,
+  trendPressure,
   msbZigZag,
   smartMoneyConcepts,
   kalshiStrike,

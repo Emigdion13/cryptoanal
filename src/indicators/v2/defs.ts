@@ -1,11 +1,14 @@
 /** The indicators carried over from btcAnalyzerV2, with V2's inputs, defaults and colors. */
 import type { Drawing, IndicatorDef, InputDef, InputValue } from '../types'
+import type { Candle } from '../../data/types'
 import { calculateCmMacd, CM_COLORS, CM_RESOLUTIONS, cmCrosses, cmHistogramColor } from './cmMacd'
 import { asNullable, detectMacdDivergences, DIVERGENCE_INPUTS, divergenceDrawings, divergenceSettings } from './divergence'
 import { calculateMsbZigZag } from './msbZigZag'
 import { SMC_DEFAULTS, smcDrawings, type SmcSettings } from './smc'
 import { calculateTmoScalper, TMO_COLORS, TMO_CUTOFF, TMO_FILL_EDGE, TMO_FILL_OPACITY, TMO_RESOLUTIONS } from './tmoScalper'
 import { calculateTmoLux, TMO_LUX_COLORS } from './tmoLux'
+import { calculateTrendPressure, TREND_PRESSURE_COLORS, TREND_PRESSURE_DEFAULTS, type TrendPressureSettings } from './trendPressure'
+import { calculateVixFix, vixFixCall, WVF_COLORS } from './vixFix'
 import { rsi as wilderRsi, source as sourceValues, type Source } from '../math'
 
 const n = (v: InputValue) => Math.max(1, Math.round(Number(v)))
@@ -384,4 +387,225 @@ export const rsiDivergence: IndicatorDef = {
     const div = divergenceSettings(i)
     return { values: { rsi }, drawings: divergenceDrawings(detectMacdDivergences(bars, asNullable(rsi), div), div) }
   },
+}
+
+// ── CM_Williams_Vix_Fix ─────────────────────────────────────────────────────
+
+const flag = (on: boolean) => (on ? 1 : 0)
+
+export const cmVixFix: IndicatorDef = {
+  type: 'cmVixFix',
+  name: 'CM_Williams_Vix_Fix Finds Market Bottoms',
+  short: 'CM_Williams_Vix_Fix',
+  category: 'Volatility',
+  overlay: false,
+  format: 'fixed',
+  inputs: [
+    { key: 'pd', label: 'LookBack period standard deviation high', type: 'int', default: 22, min: 1, max: 2000 },
+    { key: 'bbl', label: 'Bollinger band length', type: 'int', default: 20, min: 1, max: 2000 },
+    { key: 'mult', label: 'Bollinger band standard deviation up', type: 'float', default: 2, min: 1, max: 5, step: 0.1 },
+    { key: 'lb', label: 'Look back period percentile high', type: 'int', default: 50, min: 1, max: 2000 },
+    { key: 'ph', label: 'Highest percentile (0.90 = 90%, 0.95 = 95%, 0.99 = 99%)', type: 'float', default: 0.85, min: 0.01, max: 5, step: 0.01 },
+    { key: 'pl', label: 'Lowest percentile (1.10 = 90%, 1.05 = 95%, 1.01 = 99%)', type: 'float', default: 1.01, min: 0.01, max: 5, step: 0.01 },
+  ],
+  plots: [
+    { key: 'wvf', title: 'Williams Vix Fix', kind: 'histogram', color: WVF_COLORS.lime, color2: WVF_COLORS.gray, width: 4 },
+    // The script's "Show high range" and "Show standard deviation line" (both off): switched on in Style.
+    { key: 'rangeHigh', title: 'Range High Percentile', kind: 'line', color: WVF_COLORS.orange, width: 4, hidden: true },
+    { key: 'rangeLow', title: 'Range Low Percentile', kind: 'line', color: WVF_COLORS.orange, width: 4, hidden: true },
+    { key: 'upperBand', title: 'Upper Band', kind: 'line', color: WVF_COLORS.aqua, width: 3, hidden: true },
+  ],
+  compute: (bars, i, st) => {
+    const v = calculateVixFix(bars, { pd: n(i.pd), bbl: n(i.bbl), mult: Number(i.mult), lb: n(i.lb), ph: Number(i.ph), pl: Number(i.pl) })
+    return {
+      values: {
+        wvf: toNaN(v.wvf),
+        rangeHigh: toNaN(v.rangeHigh),
+        rangeLow: toNaN(v.rangeLow),
+        upperBand: toNaN(v.upperBand),
+        green: v.isGreen.map(flag),
+      },
+      colors: { wvf: v.isGreen.map((g) => (g ? st.wvf.color : (st.wvf.color2 ?? WVF_COLORS.gray))) },
+    }
+  },
+  verdict: (out, i) => {
+    const at = (key: string, k = i) => {
+      const v = out.values[key]?.[k]
+      return v !== undefined && Number.isFinite(v) ? v : null
+    }
+    const wvf = at('wvf')
+    if (wvf === null) return { text: 'WARMING UP', tone: 'flat' }
+    // Read from the triggers whether they are drawn or not.
+    return vixFixCall(wvf, at('wvf', i - 1), at('green') === 1, at('green', i - 1) === 1, at('upperBand'), at('rangeHigh'))
+  },
+}
+
+// ── Zeiierman Trend Pressure ────────────────────────────────────────────────
+
+const TP = TREND_PRESSURE_COLORS
+const tpInput = (key: keyof TrendPressureSettings, label: string, group: string, min: number, max: number, step = 1): InputDef => ({
+  key,
+  label,
+  type: step === 1 ? 'int' : 'float',
+  default: TREND_PRESSURE_DEFAULTS[key],
+  min,
+  max,
+  step,
+  group,
+})
+/** Pine's color.new(c, 20) for the pressure levels. */
+const LEVEL_ALPHA = 0.8
+/** The extreme-only gradient: this opaque at the bound, clear 30 points inside it. */
+const GRADIENT_ALPHA = 0.4
+const CLEAR = 'rgba(0, 0, 0, 0)'
+const PRESSURE_MARK = { upper: 5, lower: -107 }
+
+export const trendPressure: IndicatorDef = {
+  type: 'trendPressure',
+  name: 'Zeiierman Trend Pressure',
+  short: 'Trend Pressure',
+  category: 'Trend',
+  overlay: false,
+  format: 'fixed',
+  priceDrawings: true,
+  // Everything lives from 0 to −100, the exhaustion marks just outside it (V2's window scale).
+  floatDomain: { min: -112, max: 10 },
+  inputs: [
+    tpInput('pulseRange', 'Pulse range', 'Z-Pulse', 3, 2000),
+    tpInput('pulseStochastic', 'Pulse stochastic', 'Z-Pulse', 3, 2000),
+    tpInput('pulseSmoothing', 'Pulse smoothing', 'Z-Pulse', 1, 50),
+    tpInput('trendRange', 'Trend range', 'Z-Trend', 5, 2000),
+    tpInput('macroTrend', 'Macro trend', 'Z-Trend', 10, 2000),
+    tpInput('trendSmoothing', 'Trend smoothing', 'Z-Trend', 1, 30),
+    tpInput('trendPersistence', 'Trend persistence', 'Z-Trend', 0, 20, 0.5),
+    tpInput('exhaustionZone', 'Exhaustion zone', 'Pressure Exhaustion', 5, 40),
+    tpInput('sensitivity', 'Sensitivity', 'Pressure Exhaustion', 1, 10),
+    tpInput('reactiveSmoothing', 'Reactive smoothing', 'Pressure Core', 1, 30),
+    tpInput('regimeWeight', 'Regime weight', 'Pressure Core', 0, 1, 0.05),
+    { key: 'showCrosses', label: 'Pulse / trend crosses', type: 'bool', default: false, group: 'Display' },
+    { key: 'gradientFill', label: 'Gradient fill', type: 'bool', default: true, group: 'Display' },
+    { key: 'priceBoxes', label: 'Price boxes', type: 'bool', default: true, group: 'Display' },
+    { ...tpInput('maxBoxes', 'Max price boxes', 'Display', 1, 300), hideInTitle: true },
+    { key: 'hot', label: 'Hot', type: 'color', default: TP.hot, group: 'Display', hideInTitle: true },
+    { key: 'cold', label: 'Cold', type: 'color', default: TP.cold, group: 'Display', hideInTitle: true },
+  ],
+  plots: [
+    { key: 'pulse', title: 'Z-Pulse', kind: 'line', color: TP.pulse, width: 1 },
+    { key: 'trend', title: 'Z-Trend', kind: 'line', color: TP.trend, width: 2 },
+    { key: 'core', title: 'Pressure Core', kind: 'line', color: TP.coreNeutral, width: 2 },
+    { key: 'upperMark', title: 'Upper Pressure', kind: 'dots', color: TP.hot, width: 2 },
+    { key: 'lowerMark', title: 'Lower Pressure', kind: 'dots', color: TP.cold, width: 2 },
+    { key: 'bullCross', title: 'Bullish Cross', kind: 'dots', color: TP.cold, width: 4 },
+    { key: 'bearCross', title: 'Bearish Cross', kind: 'dots', color: TP.hot, width: 4 },
+  ],
+  levels: [
+    { title: 'Upper Bound', value: 0, color: alpha(TP.hot, LEVEL_ALPHA), style: 'solid' },
+    { title: 'Equilibrium', value: -50, color: alpha(TP.equilibrium, LEVEL_ALPHA), style: 'solid' },
+    { title: 'Lower Bound', value: -100, color: alpha(TP.cold, LEVEL_ALPHA), style: 'solid' },
+  ],
+  // The part of the pulse-to-trend band past −30 (hot) or −70 (cold), as V2's gradient shades it.
+  fills: [
+    { from: 'hotTop', to: 'hotEdge', color: CLEAR, colorsKey: 'hotBand' },
+    { from: 'coldEdge', to: 'coldBottom', color: CLEAR, colorsKey: 'coldBand' },
+  ],
+  compute: (bars, i, st) => {
+    const settings = Object.fromEntries(
+      Object.keys(TREND_PRESSURE_DEFAULTS).map((k) => [k, Number(i[k] ?? TREND_PRESSURE_DEFAULTS[k as keyof TrendPressureSettings])]),
+    ) as unknown as TrendPressureSettings
+    const v = calculateTrendPressure(bars, settings, tickOf(bars))
+    const hot = String(i.hot),
+      cold = String(i.cold)
+    const core = st.core
+    const coreColors = v.coreTone.map((t) =>
+      t === 'bull' ? alpha(TP.coreBull, 0.85) : t === 'bear' ? alpha(TP.coreBear, 0.85) : alpha(core?.color ?? TP.coreNeutral, 0.65),
+    )
+    // Stronger the nearer the band reaches its bound; nothing between −30 and −70.
+    const hotTop: number[] = [],
+      hotEdge: number[] = [],
+      coldEdge: number[] = [],
+      coldBottom: number[] = []
+    const hotBand: string[] = [],
+      coldBand: string[] = []
+    v.pulse.forEach((p, k) => {
+      const t = v.trend[k]
+      const top = p === null || t === null ? NaN : Math.max(p, t),
+        bottom = p === null || t === null ? NaN : Math.min(p, t)
+      const isHot = !!i.gradientFill && top > -30,
+        isCold = !!i.gradientFill && bottom < -70
+      hotTop.push(isHot ? top : NaN)
+      hotEdge.push(isHot ? Math.max(bottom, -30) : NaN)
+      hotBand.push(isHot ? alpha(hot, (GRADIENT_ALPHA * (top + 30)) / 30) : CLEAR)
+      coldEdge.push(isCold ? Math.min(top, -70) : NaN)
+      coldBottom.push(isCold ? bottom : NaN)
+      coldBand.push(isCold ? alpha(cold, (GRADIENT_ALPHA * (-70 - bottom)) / 30) : CLEAR)
+    })
+    const at = (flags: boolean[], y: number | (number | null)[]) =>
+      toNaN(flags.map((on, k) => (on ? (typeof y === 'number' ? y : y[k]) : null)))
+
+    // The pressure levels move with the zone and sensitivity, so they are drawn, not fixed levels.
+    const drawings: Drawing[] = [
+      { type: 'line', x1: 0, y1: v.upper, x2: 'end', y2: v.upper, color: alpha(hot, LEVEL_ALPHA), extendRight: true },
+      { type: 'line', x1: 0, y1: v.lower, x2: 'end', y2: v.lower, color: alpha(cold, LEVEL_ALPHA), extendRight: true },
+    ]
+    // Starts are crosses on the marks' row.
+    v.upperStart.forEach((on, x) => on && drawings.push({ type: 'text', x, y: PRESSURE_MARK.upper, text: '×', color: hot, size: 12, weight: 700 }))
+    v.lowerStart.forEach((on, x) => on && drawings.push({ type: 'text', x, y: PRESSURE_MARK.lower, text: '×', color: cold, size: 12, weight: 700 }))
+
+    const priceDrawings: Drawing[] = []
+    if (i.priceBoxes) {
+      for (const box of v.boxes) {
+        const color = box.side === 'upper' ? hot : cold
+        priceDrawings.push({ type: 'box', x1: box.start, x2: box.end, top: box.top, bottom: box.bottom, fill: alpha(color, 0.2), border: alpha(color, 0.4) })
+      }
+      // Where pressure let go: ▾ at the top of an upper box, ▴ under a lower one.
+      bars.forEach((_, x) => {
+        const up = v.upperReleasePrice[x],
+          down = v.lowerReleasePrice[x]
+        if (up !== null) priceDrawings.push({ type: 'triangle', x, y: up, dir: 'down', color: hot, size: 5 })
+        if (down !== null) priceDrawings.push({ type: 'triangle', x, y: down, dir: 'up', color: cold, size: 5 })
+      })
+    }
+
+    return {
+      values: {
+        pulse: toNaN(v.pulse),
+        trend: toNaN(v.trend),
+        core: toNaN(v.core),
+        upperMark: at(v.upperActive.map((on, k) => on || v.upperRelease[k]), PRESSURE_MARK.upper),
+        lowerMark: at(v.lowerActive.map((on, k) => on || v.lowerRelease[k]), PRESSURE_MARK.lower),
+        bullCross: i.showCrosses ? at(v.crossUp, v.trend) : bars.map(() => NaN),
+        bearCross: i.showCrosses ? at(v.crossDown, v.trend) : bars.map(() => NaN),
+        // The call: 1 upper pressure, −1 lower, 0 neutral; crosses whether drawn or not.
+        state: v.upperActive.map((on, k) => (on ? 1 : v.lowerActive[k] ? -1 : 0)),
+        cross: v.crossUp.map((up, k) => (up ? 1 : v.crossDown[k] ? -1 : 0)),
+        hotTop,
+        hotEdge,
+        coldEdge,
+        coldBottom,
+      },
+      colors: { core: coreColors, hotBand, coldBand, upperMark: bars.map(() => hot), lowerMark: bars.map(() => cold) },
+      drawings,
+      priceDrawings,
+    }
+  },
+  verdict: (out, i) => {
+    const state = out.values.state?.[i]
+    if (state === undefined || !Number.isFinite(out.values.pulse?.[i])) return null
+    const cross = out.values.cross?.[i] === 1 ? ' · BULL CROSS' : out.values.cross?.[i] === -1 ? ' · BEAR CROSS' : ''
+    if (state === 1) return { text: `UPPER PRESSURE${cross}`, tone: 'ob' }
+    if (state === -1) return { text: `LOWER PRESSURE${cross}`, tone: 'os' }
+    return { text: `NEUTRAL${cross}`, tone: 'flat' }
+  },
+}
+
+/** The market's price step (Pine's syminfo.mintick): the finest step the recent prices show. */
+function tickOf(bars: readonly Candle[]): number {
+  let decimals = 0
+  for (const b of bars.slice(-50))
+    for (const p of [b.open, b.high, b.low, b.close]) {
+      const s = String(p)
+      const dot = s.indexOf('.')
+      if (dot >= 0 && !s.includes('e')) decimals = Math.max(decimals, s.length - dot - 1)
+    }
+  return decimals ? 10 ** -Math.min(decimals, 8) : 1
 }

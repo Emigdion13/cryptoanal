@@ -128,11 +128,24 @@ export interface ComputeContext {
   timeToIndex: (time: number) => number
 }
 
-/** Values per bar for each plot; per-bar colors for histograms that change color. */
+/**
+ * Values per bar for each plot (and any other series the indicator's call reads); per-bar colors
+ * for histograms that change color.
+ */
 export interface Output {
   values: Record<string, number[]>
   colors?: Record<string, (string | undefined)[]>
   drawings?: Drawing[]
+  /** A pane indicator's marks on the candles (Trend Pressure's exhaustion boxes). */
+  priceDrawings?: Drawing[]
+}
+
+export type Tone = 'bull' | 'bear' | 'ob' | 'os' | 'flat'
+
+/** What an indicator is read for at a bar: the floating window's and the phone tile's call. */
+export interface Verdict {
+  text: string
+  tone: Tone
 }
 
 export interface PlotStyle {
@@ -170,6 +183,12 @@ export interface IndicatorDef {
   external?: boolean
   /** Other resolutions (seconds) it reads through ctx.feed, for these inputs on this chart. */
   feeds?: (inputs: Record<string, InputValue>, chart: IntervalDef) => number[]
+  /** Its own call at bar `i`, over the generic one read from its lines and levels. */
+  verdict?: (out: Output, i: number) => Verdict | null
+  /** A fixed scale for its floating window, for a series that lives on a known range. */
+  floatDomain?: { min: number; max: number }
+  /** Draws `priceDrawings` on the candles though it has a pane of its own. */
+  priceDrawings?: boolean
 }
 
 /** An indicator's floating window (V2's oscillator windows), as saved with the layout. */

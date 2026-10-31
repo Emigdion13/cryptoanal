@@ -34,6 +34,9 @@ Then open http://localhost:5190.
   - **TMO Scalper**: three timeframes (1m / 5m / 30m by default) with the gated ▲▼ arrows, the extreme-only arrows, the OB/OS zones and each timeframe's Main-to-Signal cloud.
   - **TMO [LuxAlgo]** (Triangular Momentum Oscillator & Real Time Divergences): the 4-colour momentum histogram (or the price-correlation gradient), Buy/Sell turns and divergence lines.
   - **RSI Divergence**: RSI 14 with regular and hidden divergences.
+  - **CM_Williams_Vix_Fix (22, 20, 2, 50, 0.85, 1.01)** (ChrisMoody): Larry Williams' synthetic VIX, the fear index for any asset — lime bars are fear spikes (WVF at or over its Bollinger upper band or its percentile range high), read as potential bottoms. The upper band and range lines are off until switched on in Style. Its window calls a fresh spike ▲ POTENTIAL BOTTOM, a run of them ▲ BOTTOM SIGNAL HOLDS, within 15% of a trigger ⚠ NEAR TRIGGER, otherwise QUIET.
+  - **Zeiierman Trend Pressure** (© Zeiierman, CC BY-NC-SA 4.0): Z-Pulse, Z-Trend and the bull/bear Pressure Core on a 0 to −100 scale, the moving pressure levels, the extreme-only gradient, exhaustion dots, and boxes on the candles over the bars pressure held (▾ / ▴ where it let go). Its window, and its phone tile, call UPPER PRESSURE, LOWER PRESSURE or NEUTRAL, with a pulse / trend cross when there is one.
+  - Both checked against V2's own code (`src/indicators/v2/fixtures/pressure-golden.json`): every value, state and box.
   - **RSI** and **Stochastic RSI (14, 14, 3, 3)** are TradingView's built-ins, the same numbers V2 shows.
   - **MSB-OB ZigZag (Market Structure)**: the swing-high to swing-low zig-zag.
   - **Smart Money Concepts [LuxAlgo]**: BOS/CHoCH, swing labels, strong/weak highs and lows, order blocks, EQH/EQL, fair value gaps, previous day/week/month highs and lows, premium/discount zones — every LuxAlgo setting, in sections.

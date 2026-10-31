@@ -13,7 +13,8 @@
  * else spans its own lows and highs, padded, and level lines appear once the scale reaches them.
  */
 import type { Candle } from '../data/types'
-import type { Drawing, IndicatorDef, Output, PlotStyle } from '../indicators/types'
+import type { Drawing, IndicatorDef, Output, PlotStyle, Verdict } from '../indicators/types'
+export type { Tone, Verdict } from '../indicators/types'
 
 export const FLOAT_MIN_BARS = 8
 export const FLOAT_MAX_BARS = 120
@@ -35,13 +36,6 @@ export function clampBars(value: unknown): number {
   const n = Math.round(Number(value))
   if (value === undefined || value === null || !Number.isFinite(n)) return FLOAT_DEFAULT_BARS
   return Math.min(FLOAT_MAX_BARS, Math.max(FLOAT_MIN_BARS, n))
-}
-
-export type Tone = 'bull' | 'bear' | 'ob' | 'os' | 'flat'
-
-export interface Verdict {
-  text: string
-  tone: Tone
 }
 
 export interface FloatLine {
@@ -172,10 +166,12 @@ export function buildModel({ def, out, bars, styles, end, count }: ModelInput): 
     ...(def.levels ?? []).map((l) => l.value),
     ...(def.fills ?? []).flatMap((f) => [f.from, f.to]).filter((v): v is number => typeof v === 'number'),
   ]
-  const { domain, centered } = paneDomain(
-    [...lines.map((l) => l.values), ...histograms.map((h) => h.values), ...(n && bounds.length ? [bounds] : [])],
-    histograms.length > 0,
-  )
+  const { domain, centered } = def.floatDomain
+    ? { domain: def.floatDomain, centered: false }
+    : paneDomain(
+        [...lines.map((l) => l.values), ...histograms.map((h) => h.values), ...(n && bounds.length ? [bounds] : [])],
+        histograms.length > 0,
+      )
   const levels = (def.levels ?? [])
     .filter((l) => l.value >= domain.min && l.value <= domain.max)
     .map((l) => ({ value: l.value, color: l.color, dashed: l.style !== 'solid' }))
@@ -257,6 +253,8 @@ const BULL_WORD = /\b(buy|bull|long)\b/i
  */
 export function verdictAt(input: ModelInput & { i: number }, model: FloatModel): Verdict {
   const { def, out, styles, i } = input
+  const own = def.verdict?.(out, i)
+  if (own) return own
   const value = (key: string, k = i) => finite(out.values[key]?.[k])
   const lines = def.plots.filter((p) => (p.kind === 'line' || p.kind === 'step') && visible(styles, p.key) && value(p.key) !== null)
   const histogram = def.plots.find((p) => p.kind === 'histogram' && visible(styles, p.key) && value(p.key) !== null)

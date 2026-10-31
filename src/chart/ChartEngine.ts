@@ -102,6 +102,8 @@ interface Runtime {
   drawing: DrawingPrimitive | null
   front: DrawingPrimitive | null
   frontHost: ISeriesApi<SeriesType> | null
+  /** A pane indicator's marks on the candles: boxes behind them, the rest on top. */
+  price: { back: DrawingPrimitive; front: DrawingPrimitive; host: ISeriesApi<SeriesType> } | null
   pane: number
   /** Recomputed in full on live updates (reads other timeframes, or draws shapes), so throttled. */
   heavy: boolean
@@ -524,6 +526,10 @@ export class ChartEngine {
     for (const rt of this.runtimes) {
       if (rt.drawing) this.chart.panes()[rt.pane]?.detachPrimitive(rt.drawing)
       if (rt.front && rt.frontHost === this.main) this.main?.detachPrimitive(rt.front)
+      if (rt.price) {
+        this.chart.panes()[0]?.detachPrimitive(rt.price.back)
+        if (rt.price.host === this.main) this.main?.detachPrimitive(rt.price.front)
+      }
       for (const s of rt.series.values()) this.chart.removeSeries(s)
     }
     this.runtimes = []
@@ -547,12 +553,20 @@ export class ChartEngine {
         drawing: null,
         front: null,
         frontHost: null,
+        price: null,
         pane,
         heavy: false,
         lastFull: 0,
         count: 0,
         inputsKey: JSON.stringify(inst.inputs),
         stylesKey: JSON.stringify(inst.styles) + inst.hidden,
+      }
+      // Its marks on the candles stay there whether its pane is docked or floating.
+      const main = this.main
+      if (def.priceDrawings && !def.overlay && main) {
+        rt.price = { back: new DrawingPrimitive(main, 'back'), front: new DrawingPrimitive(main, 'front'), host: main }
+        this.chart.panes()[0]?.attachPrimitive(rt.price.back)
+        main.attachPrimitive(rt.price.front)
       }
       if (floating) {
         this.runtimes.push(rt)
@@ -653,12 +667,15 @@ export class ChartEngine {
     rt.out = rt.def.compute(this.bars, { ...defaultInputs(rt.def), ...rt.inst.inputs }, rt.inst.styles, this.context())
     rt.count = this.bars.length
     rt.lastFull = performance.now()
-    rt.heavy = !!rt.def.feeds || !!rt.def.external || !!rt.out.drawings?.length
+    rt.heavy = !!rt.def.feeds || !!rt.def.external || !!rt.out.drawings?.length || !!rt.out.priceDrawings?.length
     for (const [key, series] of rt.series) series.setData(this.bars.map((_, i) => this.indicatorPoint(rt, key, i)))
     this.updateFills(rt)
     const drawings = rt.inst.hidden ? [] : (rt.out.drawings ?? [])
     rt.drawing?.set(drawings, this.bars.length - 1)
     rt.front?.set(drawings, this.bars.length - 1)
+    const onPrice = rt.inst.hidden ? [] : (rt.out.priceDrawings ?? [])
+    rt.price?.back.set(onPrice, this.bars.length - 1)
+    rt.price?.front.set(onPrice, this.bars.length - 1)
   }
 
   private indicatorPoint(rt: Runtime, key: string, i: number) {
