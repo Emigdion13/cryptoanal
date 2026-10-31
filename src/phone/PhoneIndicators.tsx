@@ -60,6 +60,18 @@ export function usePhoneIndicators(onSignedOut: () => void) {
 }
 
 /**
+ * The list with the instances `ids` names in that order, in the places they held (the tiles
+ * dragged into a new order); every other one, an overlay or a hidden one, keeps its place.
+ */
+export function reordered(list: IndicatorInstance[], ids: string[]): IndicatorInstance[] {
+  const byId = new Map(list.map((i) => [i.id, i]))
+  const moved = ids.map((id) => byId.get(id)).filter((i): i is IndicatorInstance => !!i)
+  const ours = new Set(moved.map((i) => i.id))
+  let k = 0
+  return list.map((i) => (ours.has(i.id) ? moved[k++] : i))
+}
+
+/**
  * The sheet: what the phone shows, each with a remove button, then every indicator to add,
  * searchable. "Use the desktop's" drops the phone's list.
  */

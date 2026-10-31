@@ -123,8 +123,10 @@ body.phone-body {
   border-color: rgba(43, 185, 155, 0.6);
 }
 /* The indicators: tiles three to a row; the open one takes the whole first row, just under the
-   price chart (dense: the tiles after it fill the gap it leaves). */
+   price chart (dense: the tiles after it fill the gap it leaves). Positioned: a dragged tile is
+   placed from its offsets in the grid. */
 .phone-tiles {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-auto-flow: row dense;
@@ -149,12 +151,23 @@ body.phone-body {
   padding: 8px 8px 6px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  /* A long press lifts the tile to drag it: no text selection or iOS menu. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
   transition:
     border-color 0.25s,
     transform 0.1s;
 }
 .phone-tile:not(.is-open):active {
   transform: scale(0.96);
+}
+/* Lifted by a long press, it follows the finger over the others. */
+.phone-tile[data-lifted] {
+  z-index: 4;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55);
+  cursor: grabbing;
+  transition: box-shadow 0.15s;
 }
 /* A closed tile is tinted by its call, to be read from across the screen. */
 .phone-tile.is-bull:not(.is-open) {

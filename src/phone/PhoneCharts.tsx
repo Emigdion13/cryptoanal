@@ -1,4 +1,16 @@
-import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+} from 'react'
 import { ChartEngine, type LegendState } from '../chart/ChartEngine'
 import { granularityFor, parseInterval } from '../data/intervals'
 import { watchKalshi } from '../data/kalshi'
@@ -15,7 +27,7 @@ import { LAYOUT_BY_ID } from '../ui/layouts'
 import { defaults, SCALE_FIT_DEFAULTS, type ChartState, type Settings } from '../ui/settings'
 import { phoneFetch, PhoneRequestError } from './auth'
 import { HistoryIcon, PhoneHistory } from './PhoneHistory'
-import { IndicatorsIcon, PhoneIndicatorSheet, usePhoneIndicators } from './PhoneIndicators'
+import { IndicatorsIcon, PhoneIndicatorSheet, reordered, usePhoneIndicators } from './PhoneIndicators'
 import { FlowPill, TimingPicker, usePhoneTiming } from './PhoneFlow'
 import { KalshiOdds, NextRoundSheet, NextRoundTimer } from './PhoneNextRound'
 import { HoldingColumn, PhoneQuickTrade } from './PhoneQuickTrade'
@@ -32,6 +44,12 @@ const TILE_BARS = 30
 const TILE_PLOT = { width: 120, height: 40, padTop: 4, padBottom: 4 }
 /** A touch that moves less than this (px) is a tap; more is a scroll or a scrub. */
 const TAP_SLOP = 10
+/** A tap is shorter than this, ms; a longer press on an open card is reading a bar. */
+const TAP_MS = 300
+/** A press this long on a closed tile lifts it, to be dragged to another place, ms. */
+const HOLD_MS = 400
+/** A dragged tile this close to the screen's top or bottom scrolls the cards, px. */
+const EDGE_PX = 100
 /** The cards' background (phone.css), under the price chart too. */
 const CARD_BG = '#151a21'
 /** How often the indicator cards follow the live bar, ms: every tick redrew them all, and a phone
@@ -114,7 +132,8 @@ function useDesktop(onSignedOut: () => void) {
  * V2's charts screen for this app: a sticky header with the symbol, the desktop's charts as tabs,
  * then the price card with the desktop's overlays and drawings, and a tile per indicator that has a
  * pane of its own (floating ones too): its call, its value and a sparkline. A tap opens a tile into
- * the whole card; a tap anywhere else (or on another tile) closes it. Touch the price chart to read
+ * the whole card; a tap on it, anywhere else or on another tile closes it. Press and hold a tile
+ * to drag it to another place: the order is saved as the phone's own. Touch the price chart to read
  * a bar: the tiles and the card follow it. The charts follow the desktop's workspace; the
  * indicators are the phone's own once it has some (the header's chart button, PhoneIndicators.tsx).
  *
@@ -136,6 +155,13 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
   const chart = useMemo(
     () => (desktopChart ? { ...desktopChart, ...(mine.list ? { indicators: mine.list } : {}), ...(timing ? { interval: timing } : {}) } : null),
     [desktopChart, mine.list, timing],
+  )
+  // Tiles dragged into a new order: saved as the phone's own list (a copy of the desktop's, the first time).
+  const reorder = useCallback(
+    (ids: string[]) => {
+      if (chart) mine.save(reordered(chart.indicators, ids))
+    },
+    [chart, mine.save],
   )
   const trade = useTrade(chart?.symbol ?? 'BTC-USD')
   // The quick-trade circles are showing.
@@ -225,7 +251,13 @@ export function PhoneCharts({ local, onSignOut, onSignedOut }: { local: boolean;
           )}
           {problem && <div className="phone-problem">{problem}</div>}
           {chart && desktop && (mine.ready || mine.problem) ? (
-            <ChartCards key={`${index}:${chart.interval}`} chart={chart} scaleFit={desktop.scaleFit} drawings={desktop.drawings[chart.symbol]} />
+            <ChartCards
+              key={`${index}:${chart.interval}`}
+              chart={chart}
+              scaleFit={desktop.scaleFit}
+              drawings={desktop.drawings[chart.symbol]}
+              onReorder={reorder}
+            />
           ) : (
             !problem && <div className="phone-wait">Reading the desktop's chart…</div>
           )}
@@ -298,10 +330,12 @@ const ChartCards = memo(function ChartCards({
   chart,
   scaleFit,
   drawings,
+  onReorder,
 }: {
   chart: ChartState
   scaleFit: Desktop['scaleFit']
   drawings: UserDrawing[] | undefined
+  onReorder: (ids: string[]) => void
 }) {
   const catalog = useCatalog()
   const product = getProduct(catalog, chart.symbol)
@@ -330,6 +364,7 @@ const ChartCards = memo(function ChartCards({
   useEffect(() => {
     if (open) tilesRef.current?.querySelector('.phone-tile.is-open')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [open])
+  const tileDrag = useTileDrag(tilesRef, !!engine && cards.length > 0, cards, onReorder)
 
   useEffect(() => {
     const e = new ChartEngine(hostRef.current!)
@@ -416,7 +451,7 @@ const ChartCards = memo(function ChartCards({
         </div>
       </section>
       {engine && cards.length > 0 && (
-        <div className="phone-tiles" ref={tilesRef}>
+        <div className="phone-tiles" ref={tilesRef} {...tileDrag}>
           {cards.map((inst) => {
             const def = INDICATOR_BY_TYPE.get(inst.type)!
             return (
@@ -472,6 +507,147 @@ function useCloseOnTapOutside(active: boolean, close: () => void) {
   }, [active])
 }
 
+/**
+ * Press and hold a closed tile, then drag it: the tiles make room as it passes, and where it is let
+ * go is its place. While it moves the tiles only take a CSS `order`, so nothing is moved in the page
+ * under the finger; the new order goes to `onReorder` once, when it is let go (not if the press is
+ * cancelled). A press that moves first is a scroll, and lifts nothing.
+ */
+function useTileDrag(tilesRef: RefObject<HTMLDivElement | null>, ready: boolean, cards: IndicatorInstance[], onReorder: (ids: string[]) => void) {
+  const idsRef = useRef<string[]>([])
+  idsRef.current = cards.map((c) => c.id)
+  const onReorderRef = useRef(onReorder)
+  onReorderRef.current = onReorder
+  const lifted = useRef(false)
+  const swallowClickUntil = useRef(0)
+  const stop = useRef<((drop: boolean) => void) | null>(null)
+
+  useEffect(() => {
+    const tiles = tilesRef.current
+    if (!ready || !tiles) return
+    // The lifted tile follows the finger and the page stays put. Not passive, to be able to keep it.
+    const hold = (e: TouchEvent) => lifted.current && e.cancelable && e.preventDefault()
+    tiles.addEventListener('touchmove', hold, { passive: false })
+    return () => tiles.removeEventListener('touchmove', hold)
+  }, [tilesRef, ready])
+  useEffect(() => () => stop.current?.(false), [])
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const tiles = e.currentTarget
+    const tile = e.target instanceof Element ? e.target.closest<HTMLElement>('.phone-tile:not(.is-open)') : null
+    const id = tile?.dataset.id
+    if (!tile || !id || !e.isPrimary || e.button !== 0) return
+    stop.current?.(false)
+    const pointer = e.pointerId
+    const start = { x: e.clientX, y: e.clientY }
+    let at = start
+    let grab = start
+    let order = idsRef.current
+    let frame = 0
+    // How far the cards scroll, read before the lifted tile (whose transform makes the page longer) moves.
+    let most = 0
+    const lane = tiles.closest<HTMLElement>('.phone-lane')
+    const closed = () => [...tiles.querySelectorAll<HTMLElement>('.phone-tile[data-id]:not(.is-open)')]
+    // Where a tile sits in the grid, whatever transform or glide it has.
+    const slot = (el: HTMLElement) => {
+      const box = tiles.getBoundingClientRect()
+      return { left: box.left + el.offsetLeft, top: box.top + el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }
+    }
+    const follow = () => {
+      const s = slot(tile)
+      tile.style.transform = `translate(${at.x - grab.x - s.left}px, ${at.y - grab.y - s.top}px) scale(1.05)`
+    }
+    // Over another tile, the lifted one takes its place; the ones between glide over by one.
+    const place = () => {
+      const others = closed().filter((el) => el !== tile)
+      const over = others.find((el) => {
+        const s = slot(el)
+        return at.x >= s.left && at.x < s.left + s.width && at.y >= s.top && at.y < s.top + s.height
+      })
+      const to = over ? order.indexOf(over.dataset.id!) : -1
+      if (to < 0 || !order.includes(id)) return
+      const was = new Map(others.map((el) => [el, el.getBoundingClientRect()]))
+      order = order.filter((x) => x !== id)
+      order.splice(to, 0, id)
+      for (const el of closed()) el.style.order = String(order.indexOf(el.dataset.id!))
+      for (const [el, r] of was) {
+        const s = slot(el)
+        const dx = r.left - s.left
+        const dy = r.top - s.top
+        if (Math.abs(dx) > 1 || Math.abs(dy) > 1)
+          el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 160, easing: 'ease-out' })
+      }
+      follow()
+    }
+    // Taken toward the screen's top or bottom, near it, the cards scroll (one lifted there stays put).
+    const scroll = () => {
+      const step = at.y > innerHeight - EDGE_PX && at.y > start.y + TAP_SLOP ? 8 : at.y < EDGE_PX && at.y < start.y - TAP_SLOP ? -8 : 0
+      const top = lane?.scrollTop
+      if (lane && step) lane.scrollTop = Math.max(0, Math.min(most, lane.scrollTop + step))
+      if (lane && lane.scrollTop !== top) {
+        follow()
+        place()
+      }
+      frame = requestAnimationFrame(scroll)
+    }
+    const lift = () => {
+      lifted.current = true
+      most = lane ? lane.scrollHeight - lane.clientHeight : 0
+      const s = slot(tile)
+      grab = { x: at.x - s.left, y: at.y - s.top }
+      for (const el of closed()) el.style.order = String(order.indexOf(el.dataset.id!))
+      tile.dataset.lifted = ''
+      follow()
+      navigator.vibrate?.(10)
+      frame = requestAnimationFrame(scroll)
+    }
+    const timer = setTimeout(lift, HOLD_MS)
+
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointer) return
+      at = { x: ev.clientX, y: ev.clientY }
+      if (!lifted.current) {
+        if (Math.hypot(at.x - start.x, at.y - start.y) >= TAP_SLOP) end(false)
+        return
+      }
+      follow()
+      place()
+    }
+    const up = (ev: PointerEvent) => ev.pointerId === pointer && end(true)
+    const cancel = (ev: PointerEvent) => ev.pointerId === pointer && end(false)
+    const end = (drop: boolean) => {
+      clearTimeout(timer)
+      cancelAnimationFrame(frame)
+      removeEventListener('pointermove', move)
+      removeEventListener('pointerup', up)
+      removeEventListener('pointercancel', cancel)
+      stop.current = null
+      if (!lifted.current) return
+      lifted.current = false
+      // The click that ends the press is not a tap on the tile.
+      swallowClickUntil.current = performance.now() + 400
+      delete tile.dataset.lifted
+      tile.style.transform = ''
+      for (const el of closed()) el.style.order = ''
+      if (drop && order.some((x, k) => x !== idsRef.current[k])) onReorderRef.current(order)
+    }
+    stop.current = end
+    addEventListener('pointermove', move)
+    addEventListener('pointerup', up)
+    addEventListener('pointercancel', cancel)
+  }
+  const onClickCapture = (e: ReactMouseEvent) => {
+    if (performance.now() >= swallowClickUntil.current) return
+    e.stopPropagation()
+    e.preventDefault()
+  }
+  // A long press on a tile lifts it; it is not asking for the browser's menu.
+  const onContextMenu = (e: ReactMouseEvent) => {
+    if (e.target instanceof Element && e.target.closest('.phone-tile:not(.is-open)')) e.preventDefault()
+  }
+  return { onPointerDown, onClickCapture, onContextMenu }
+}
+
 /** The legend the indicator cards follow: a touched bar at once, the live bar once a CARD_LIVE_MS. */
 function useCardLegend(legend: LegendState | null): LegendState | null {
   const [shown, setShown] = useState(legend)
@@ -491,8 +667,9 @@ function useCardLegend(legend: LegendState | null): LegendState | null {
 
 /**
  * One indicator. Closed, a tile: its name, the call it is read for, its main value and a sparkline,
- * tinted by the call; a tap opens it. Open, a card like V2's: the last bars of what its pane would
- * plot and its values. Touch the plot (or the price chart) to read another bar.
+ * tinted by the call; a tap opens it (press and hold to drag it, useTileDrag). Open, a card like
+ * V2's: the last bars of what its pane would plot and its values; a tap closes it. Touch the plot
+ * (or the price chart) to read another bar.
  */
 const IndicatorCard = memo(function IndicatorCard({
   inst,
@@ -507,9 +684,11 @@ const IndicatorCard = memo(function IndicatorCard({
   engine: ChartEngine
   legend: LegendState | null
   open: boolean
-  onOpen: (id: string) => void
+  onOpen: (id: string | null) => void
 }) {
   const [touchBar, setTouchBar] = useState<number | null>(null)
+  // The open card's press, to tell a tap (it closes the card) from a scrub or a held reading.
+  const press = useRef<{ x: number; y: number; at: number } | null>(null)
   const clipId = `phone-clip-${useId().replace(/:/g, '')}`
   const snap = engine.indicatorSnapshot(inst.id)
   if (!snap || !snap.bars.length) return null
@@ -549,6 +728,7 @@ const IndicatorCard = memo(function IndicatorCard({
     return (
       <section
         className={`phone-card phone-tile is-${verdict.tone}`}
+        data-id={inst.id}
         role="button"
         tabIndex={0}
         aria-expanded={false}
@@ -581,7 +761,16 @@ const IndicatorCard = memo(function IndicatorCard({
   }
 
   return (
-    <section className={`phone-card phone-tile is-open is-${verdict.tone}`} aria-expanded>
+    <section
+      className={`phone-card phone-tile is-open is-${verdict.tone}`}
+      data-id={inst.id}
+      aria-expanded
+      onPointerDown={(e) => (press.current = e.isPrimary ? { x: e.clientX, y: e.clientY, at: e.timeStamp } : null)}
+      onClick={(e) => {
+        const p = press.current
+        if (p && e.timeStamp - p.at < TAP_MS && Math.hypot(e.clientX - p.x, e.clientY - p.y) < TAP_SLOP) onOpen(null)
+      }}
+    >
       <header className="phone-card-head">
         <span className="phone-card-title">
           <span className="phone-dot" style={{ background: accent }} />
