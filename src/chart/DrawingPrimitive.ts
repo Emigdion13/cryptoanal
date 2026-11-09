@@ -107,8 +107,20 @@ export class DrawingPrimitive implements IPanePrimitive<Time>, ISeriesPrimitive<
       : [{ zOrder: () => 'top', renderer: () => this.front }]
   }
 
+  /**
+   * The x of a bar index, fractions included (Bayesian's banker bodies span x ± 0.35).
+   * lightweight-charts answers 0 for a fractional logical, so it is read between the two whole
+   * bars around it: the coordinate is linear in the index.
+   */
   private x(index: number | 'end'): number | null {
-    return this.chart?.timeScale().logicalToCoordinate((index === 'end' ? this.last : index) as Logical) ?? null
+    const ts = this.chart?.timeScale()
+    if (!ts) return null
+    const i = index === 'end' ? this.last : index
+    const base = Math.floor(i)
+    const at = ts.logicalToCoordinate(base as Logical)
+    if (at === null || i === base) return at
+    const next = ts.logicalToCoordinate((base + 1) as Logical)
+    return next === null ? null : at + (next - at) * (i - base)
   }
 
   private y(price: number): number | null {
