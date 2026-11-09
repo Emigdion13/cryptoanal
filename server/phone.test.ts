@@ -283,6 +283,7 @@ describe('the gate in front of the app', () => {
   it('keeps the workspace from a phone that has not signed in', async () => {
     expect((await call('GET', '/api/workspace')).body).toMatchObject({ error: 'SIGNED_OUT' })
     expect((await call('GET', '/api/kalshi/strike?product=BTC-USD')).body).toMatchObject({ error: 'SIGNED_OUT' })
+    expect((await call('GET', '/api/polymarket/strike?product=BTC-USD')).body).toMatchObject({ error: 'SIGNED_OUT' })
   })
 
   it('sends the phone from the desktop page to phone.html, and lets the page itself load', async () => {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChartEngine } from './chart/ChartEngine'
 import { parseInterval } from './data/intervals'
-import { describe, getProduct, useCatalog } from './data/products'
+import { describe, getProduct, useCatalog, sourceOf } from './data/products'
 import { useQuotes } from './data/quotes'
 import type { Product } from './data/types'
 import { formatPercent, formatPrice } from './format'
@@ -308,7 +308,7 @@ export function App() {
   const screenshot = () => {
     const engine = activeEngine()
     if (!engine) return
-    const canvas = engine.screenshot(`${describe(catalog, product)} · ${interval?.label ?? ''} · Coinbase`)
+    const canvas = engine.screenshot(`${describe(catalog, product)} · ${interval?.label ?? ''} · ${sourceOf(product)}`)
     canvas.toBlob((blob) => {
       if (!blob) return
       const a = document.createElement('a')

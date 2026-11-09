@@ -1,3 +1,4 @@
+import { chainlinkProduct, fetchChainlinkCandles, isChainlink } from './chainlink'
 import type { Candle, Product } from './types'
 
 const REST = 'https://api.exchange.coinbase.com'
@@ -34,6 +35,8 @@ export async function fetchCandles(
   start: number,
   end: number,
 ): Promise<Candle[]> {
+  // Chainlink products: the dev server's recording of Polymarket's feed.
+  if (isChainlink(product)) return (await fetchChainlinkCandles(product, granularity, start, end)).candles
   const rows = await getJson<number[][]>(
     `/products/${product}/candles?granularity=${granularity}&start=${iso(start)}&end=${iso(end)}`,
   )
@@ -87,6 +90,7 @@ function decimals(increment: string): number {
 }
 
 export function productFromId(id: string, increment = '0.01'): Product {
+  if (isChainlink(id)) return chainlinkProduct(id)
   const [base, quote] = id.split('-')
   return { id, base, quote, ticker: base + quote, precision: decimals(increment) }
 }

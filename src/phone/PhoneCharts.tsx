@@ -14,6 +14,7 @@ import {
 import { ChartEngine, type LegendState } from '../chart/ChartEngine'
 import { granularityFor, parseInterval } from '../data/intervals'
 import { watchKalshi } from '../data/kalshi'
+import { watchPolymarket } from '../data/polymarket'
 import { getProduct, useCatalog } from '../data/products'
 import { formatPrice, formatVolume } from '../format'
 import { defaultInputs, INDICATOR_BY_TYPE, instanceTitle } from '../indicators/catalog'
@@ -392,6 +393,11 @@ const ChartCards = memo(function ChartCards({
     if (!engine || !usesKalshi) return
     return watchKalshi(product.id, () => engine.refreshIndicators())
   }, [engine, usesKalshi, product.id])
+  const usesPolymarket = indicators.some((i) => i.type === 'polymarketStrike')
+  useEffect(() => {
+    if (!engine || !usesPolymarket) return
+    return watchPolymarket(product.id, () => engine.refreshIndicators())
+  }, [engine, usesPolymarket, product.id])
 
   const feedGranularities = useMemo(() => {
     if (!interval) return []

@@ -2,6 +2,7 @@ import type { Candle } from '../data/types'
 import * as ta from './math'
 import type { IndicatorDef, IndicatorInstance, InputDef, InputValue, LevelDef, PlotStyle } from './types'
 import { kalshiStrike } from './kalshiStrike'
+import { polymarketStrike } from './polymarketStrike'
 import { tuxEmaScalper } from './tuxDef'
 import { luxSrBreaks } from './luxSr'
 import { bayesianNqqe } from './v2/bayesianDef'
@@ -632,6 +633,7 @@ export const INDICATORS: IndicatorDef[] = [
   msbZigZag,
   smartMoneyConcepts,
   kalshiStrike,
+  polymarketStrike,
   tuxEmaScalper,
   luxSrBreaks,
   bayesianNqqe,

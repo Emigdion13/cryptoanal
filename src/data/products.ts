@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CHAINLINK_PRODUCTS, chainlinkProduct, isChainlink } from './chainlink'
 import { FALLBACK_NAMES, fetchCurrencyNames, fetchProducts, productFromId } from './coinbase'
 import type { Product } from './types'
 
@@ -12,7 +13,11 @@ let cached: Promise<Catalog> | null = null
 
 function loadCatalog(): Promise<Catalog> {
   cached ??= Promise.all([fetchProducts(), fetchCurrencyNames().catch(() => FALLBACK_NAMES)]).then(
-    ([products, names]) => ({ products, byId: new Map(products.map((p) => [p.id, p])), names }),
+    ([coinbase, names]) => {
+      // Polymarket's settlement prices first, so searching BTC finds both.
+      const products = [...CHAINLINK_PRODUCTS.map(chainlinkProduct), ...coinbase]
+      return { products, byId: new Map(products.map((p) => [p.id, p])), names }
+    },
   )
   cached.catch(() => (cached = null))
   return cached
@@ -41,5 +46,11 @@ export function getProduct(catalog: Catalog, id: string): Product {
 
 /** "Bitcoin / U.S. Dollar" */
 export function describe(catalog: Catalog, p: Product): string {
-  return `${catalog.names[p.base] ?? p.base} / ${catalog.names[p.quote] ?? p.quote}`
+  const name = `${catalog.names[p.base] ?? p.base} / ${catalog.names[p.quote] ?? p.quote}`
+  return isChainlink(p.id) ? `${name} (Chainlink)` : name
+}
+
+/** Where a product's prices come from, for the legend. */
+export function sourceOf(p: Product): string {
+  return isChainlink(p.id) ? 'Chainlink · Polymarket' : 'Coinbase'
 }

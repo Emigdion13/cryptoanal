@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { ChartEngine, type CursorMode, type LegendState, type PaneRect } from '../chart/ChartEngine'
 import { parseInterval } from '../data/intervals'
 import { watchKalshi } from '../data/kalshi'
+import { watchPolymarket } from '../data/polymarket'
 import { useDrawings } from '../drawings/context'
 import { describe, getProduct, type Catalog } from '../data/products'
 import { INDICATOR_BY_TYPE, instanceTitle } from '../indicators/catalog'
@@ -89,6 +90,11 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
     if (!engine || !usesKalshi) return
     return watchKalshi(product.id, () => engine.refreshIndicators())
   }, [engine, usesKalshi, product.id])
+  const usesPolymarket = state.indicators.some((i) => i.type === 'polymarketStrike' && !i.hidden)
+  useEffect(() => {
+    if (!engine || !usesPolymarket) return
+    return watchPolymarket(product.id, () => engine.refreshIndicators())
+  }, [engine, usesPolymarket, product.id])
   useEffect(() => engine?.setPaneSizes(state.paneSizes), [engine, state.paneSizes])
   useEffect(() => engine?.setIndicators(state.indicators), [engine, state.indicators])
   useDrawings(engine, product.id)

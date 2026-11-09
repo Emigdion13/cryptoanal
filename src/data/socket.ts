@@ -1,3 +1,5 @@
+import { chainlinkFeed, isChainlink } from './chainlink'
+
 const WS_URL = 'wss://ws-feed.exchange.coinbase.com'
 
 export interface Match {
@@ -37,6 +39,14 @@ class CoinbaseFeed {
   subscribe(channel: 'matches', product: string, fn: (m: Match) => void): () => void
   subscribe(channel: 'ticker', product: string, fn: (t: Ticker) => void): () => void
   subscribe(channel: Channel, product: string, fn: (m: never) => void): () => void {
+    // Chainlink products come from Polymarket's socket, passed on in Coinbase's shapes. Each price
+    // counts as one "trade" (Chainlink has no volume), its milliseconds as the rising id.
+    if (isChainlink(product))
+      return chainlinkFeed.subscribe(product, (p) =>
+        channel === 'matches'
+          ? (fn as (m: Match) => void)({ product, price: p.price, size: 1, time: p.time, id: p.ms, buy: true })
+          : (fn as (t: Ticker) => void)({ product, price: p.price, open24h: NaN }),
+      )
     const key = `${channel}:${product}`
     let set = this.handlers.get(key)
     const handler = fn as Handler
@@ -61,7 +71,11 @@ class CoinbaseFeed {
   /** Called after the socket comes back, so callers can fill the gap from REST. */
   onReconnect(fn: () => void): () => void {
     this.reconnectListeners.add(fn)
-    return () => this.reconnectListeners.delete(fn)
+    const offChainlink = chainlinkFeed.onReconnect(fn)
+    return () => {
+      this.reconnectListeners.delete(fn)
+      offChainlink()
+    }
   }
 
   private send(type: 'subscribe' | 'unsubscribe', channel: Channel, product: string) {

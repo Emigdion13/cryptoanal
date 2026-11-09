@@ -134,7 +134,7 @@ export function parseHistory(payload: unknown, digits: number): KalshiWindow[] {
  * window's open) less Coinbase's average over that minute, `minutes` giving the 1-minute candle
  * averages by start; the median, so one wild minute does not move it.
  */
-export function measureBasis(windows: readonly KalshiWindow[], minutes: ReadonlyMap<number, number>, sinceSec: number): KalshiBasis | null {
+export function measureBasis(windows: readonly { start: number; strike: number }[], minutes: ReadonlyMap<number, number>, sinceSec: number): KalshiBasis | null {
   const gaps: number[] = []
   for (const w of windows) {
     const coinbase = minutes.get(w.start - 60)

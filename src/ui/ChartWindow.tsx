@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { ChartEngine, type ChartType, type CursorMode, type LegendState, type PaneRect } from '../chart/ChartEngine'
 import { INTERVAL_MENU, parseInterval } from '../data/intervals'
 import { watchKalshi } from '../data/kalshi'
+import { watchPolymarket } from '../data/polymarket'
 import { describe, type Catalog } from '../data/products'
 import { useDrawings } from '../drawings/context'
 import type { Product } from '../data/types'
@@ -290,6 +291,11 @@ function WindowChart({
     if (!engine || !usesKalshi) return
     return watchKalshi(product.id, () => engine.refreshIndicators())
   }, [engine, usesKalshi, product.id])
+  const usesPolymarket = win.indicators.some((i) => i.type === 'polymarketStrike' && !i.hidden)
+  useEffect(() => {
+    if (!engine || !usesPolymarket) return
+    return watchPolymarket(product.id, () => engine.refreshIndicators())
+  }, [engine, usesPolymarket, product.id])
 
   const feedGranularities = useMemo(() => feedGranularitiesFor(win.indicators, interval), [win.indicators, interval])
   const { status } = useChartData(engine, product, win.interval, feedGranularities)

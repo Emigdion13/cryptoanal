@@ -1,3 +1,4 @@
+import { fetchChainlinkCandles, isChainlink } from './chainlink'
 import { fetchCandles, fetchTrades, PAGE, type Trade } from './coinbase'
 import { TRADE_GRANULARITY } from './intervals'
 import type { Candle } from './types'
@@ -109,7 +110,7 @@ export class CandleCache {
     return true
   }
 
-  private mergeIn(fresh: Candle[]) {
+  protected mergeIn(fresh: Candle[]) {
     if (!fresh.length) return
     const byTime = new Map<number, Candle>()
     for (const c of this.candles) byTime.set(c.time, c)
@@ -234,12 +235,71 @@ export function secondCandles(trades: readonly Trade[]): Candle[] {
   return out
 }
 
+/**
+ * Chainlink candles (`CL:` products) out of the dev server's recording, at any granularity, one
+ * second too. The recording has holes wherever the dev server was not running, so paging back
+ * follows its own cursor rather than the oldest candle, and history ends where the recording starts.
+ */
+export class ChainlinkCache extends CandleCache {
+  /** The first second recorded, as the server last said. */
+  private earliest: number | null = null
+  /** Every candle from here on has been asked for. */
+  private cursor: number | null = null
+
+  async loadLatest(): Promise<void> {
+    const g = this.granularity
+    const end = Math.floor(Date.now() / 1000 / g) * g
+    const from = end - (PAGE - 1) * g
+    const page = await fetchChainlinkCandles(this.product, g, from, end)
+    this.earliest = page.earliest
+    const last = this.candles[this.candles.length - 1]
+    if (last && page.candles.length && page.candles[0].time > last.time + g) {
+      this.candles = []
+      this.exhausted = false
+      this.cursor = null
+    }
+    if (this.cursor === null || this.candles.length === 0) this.cursor = from
+    // Live prices pass on their milliseconds as ids: those the page already holds are skipped.
+    if (page.lastTick !== null && page.lastTick > this.lastTradeId) this.lastTradeId = page.lastTick
+    this.mergeIn(page.candles)
+    if (this.earliest === null || from <= this.earliest) this.exhausted = true
+  }
+
+  protected async fetchOlder(pages: number): Promise<number> {
+    if (this.cursor === null) {
+      await this.loadLatest()
+      return this.candles.length
+    }
+    const g = this.granularity
+    const before = this.cursor
+    if (this.earliest !== null && before <= this.earliest) {
+      this.exhausted = true
+      return 0
+    }
+    const ends = Array.from({ length: pages }, (_, i) => before - g - i * PAGE * g)
+    const results = await Promise.all(ends.map((end) => fetchChainlinkCandles(this.product, g, end - (PAGE - 1) * g, end)))
+    for (const r of results) if (r.earliest !== null) this.earliest = r.earliest
+    this.cursor = before - pages * PAGE * g
+    if (this.earliest === null || this.cursor <= this.earliest) this.exhausted = true
+    const count = this.candles.length
+    this.mergeIn(results.flatMap((r) => r.candles))
+    return this.candles.length - count
+  }
+}
+
 const caches = new Map<string, CandleCache>()
 
 export function getCache(product: string, granularity: number): CandleCache {
   const key = `${product}|${granularity}`
   let cache = caches.get(key)
   if (!cache)
-    caches.set(key, (cache = granularity === TRADE_GRANULARITY ? new TradeCache(product) : new CandleCache(product, granularity)))
+    caches.set(
+      key,
+      (cache = isChainlink(product)
+        ? new ChainlinkCache(product, granularity)
+        : granularity === TRADE_GRANULARITY
+          ? new TradeCache(product)
+          : new CandleCache(product, granularity)),
+    )
   return cache
 }

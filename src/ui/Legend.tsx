@@ -1,5 +1,6 @@
 import type { ChartEngine, LegendState } from '../chart/ChartEngine'
 import type { IntervalDef } from '../data/intervals'
+import { sourceOf } from '../data/products'
 import type { Product } from '../data/types'
 import { formatChange, formatPercent, formatPrice } from '../format'
 import { INDICATOR_BY_TYPE, instanceTitle } from '../indicators/catalog'
@@ -119,7 +120,7 @@ export function MainLegend({
             {status.logo && <CoinLogo symbol={product.base} />}
             {status.title && (
               <span>
-                {description} · {label} · Coinbase
+                {description} · {label} · {sourceOf(product)}
               </span>
             )}
           </span>

@@ -7,6 +7,7 @@
  * Coinbase's trade history, a page of 1000 at a time, only as far back as the window asks.
  */
 import { useEffect, useState } from 'react'
+import { underlying } from './chainlink'
 import { fetchTrades } from './coinbase'
 import { feed } from './socket'
 
@@ -152,7 +153,9 @@ function dropBook(product: string): void {
 }
 
 /** The buyers / sellers split over the last `windowSec`, again every half second. */
-export function useOrderFlow(product: string, windowSec: number): Flow | null {
+export function useOrderFlow(chartProduct: string, windowSec: number): Flow | null {
+  // Chainlink has no trades: a Chainlink chart shows who is winning on Coinbase.
+  const product = underlying(chartProduct)
   const [book, setBook] = useState<OrderFlow | null>(null)
   const [flow, setFlow] = useState<Flow | null>(null)
   // The book follows the coin only: another window keeps the trades already read.
