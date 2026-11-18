@@ -73,7 +73,7 @@ function Brand() {
 }
 
 /** V2's lock screen: Face ID when this phone has it, else six dots and a keypad. */
-function SignIn({ session, onDone }: { session: PhoneSession; onDone: () => void }) {
+export function SignIn({ session, onDone }: { session: PhoneSession; onDone: () => void }) {
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)

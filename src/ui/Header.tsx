@@ -56,6 +56,8 @@ interface Props {
   onPhoneAccess: () => void
   /** ⚙ → Kalshi trading: the phone's trading keys and the real-money switch. */
   onKalshiTrading: () => void
+  /** ⚙ → Polymarket US trading: the Polymarket page's key and real-money switch. */
+  onPolyTrading: () => void
   onIndicators: () => void
   /** The active chart's oscillators, for the Floating menu. */
   floating: { id: string; title: string; open: boolean }[]
@@ -135,6 +137,7 @@ export function Header(props: Props) {
         onScaleFit={props.onScaleFit}
         onPhoneAccess={props.onPhoneAccess}
         onKalshiTrading={props.onKalshiTrading}
+        onPolyTrading={props.onPolyTrading}
       />
       <button className="tb-btn icon" onClick={props.onFullscreen} title="Fullscreen mode">
         <FullscreenIcon />
@@ -352,6 +355,7 @@ function StatusLineMenu({
   onScaleFit,
   onPhoneAccess,
   onKalshiTrading,
+  onPolyTrading,
 }: {
   value: StatusLine
   onChange: (v: StatusLine) => void
@@ -359,6 +363,7 @@ function StatusLineMenu({
   onScaleFit: (v: ScaleFit) => void
   onPhoneAccess: () => void
   onKalshiTrading: () => void
+  onPolyTrading: () => void
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -420,6 +425,15 @@ function StatusLineMenu({
             }}
           >
             <span className="menu-label">Kalshi trading…</span>
+          </div>
+          <div
+            className="menu-item"
+            onClick={() => {
+              setOpen(false)
+              onPolyTrading()
+            }}
+          >
+            <span className="menu-label">Polymarket US trading…</span>
           </div>
         </div>
       )}

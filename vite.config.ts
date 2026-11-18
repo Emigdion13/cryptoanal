@@ -4,12 +4,13 @@ import { kalshiPlugin } from './server/kalshi'
 import { chainlinkPlugin } from './server/chainlink'
 import { phonePlugin } from './server/phone'
 import { polymarketPlugin } from './server/polymarket'
+import { polyUsPlugin } from './server/polyUs'
 import { tradePlugin } from './server/trade/api'
 import { workspacePlugin } from './server/workspace'
 
 export default defineConfig({
   // The phone gate first: requests through Tailscale are checked before any other API sees them.
-  plugins: [react(), phonePlugin(), workspacePlugin(), kalshiPlugin(), polymarketPlugin(), chainlinkPlugin(), tradePlugin()],
+  plugins: [react(), phonePlugin(), workspacePlugin(), kalshiPlugin(), polymarketPlugin(), chainlinkPlugin(), tradePlugin(), polyUsPlugin()],
   // A fixed port: another port is another origin, with none of the browser's saved state.
   // .ts.net: the iPhone page through Tailscale (server/phone.ts). It listens on localhost only;
   // `tailscale serve` on this computer is the way in.
@@ -18,8 +19,8 @@ export default defineConfig({
   preview: { port: 5190, strictPort: true, allowedHosts: ['.ts.net'] },
   build: {
     rollupOptions: {
-      // phone.html: the iPhone page, built next to the app.
-      input: { main: 'index.html', phone: 'phone.html' },
+      // phone.html and polymarket.html: the iPhone pages, built next to the app.
+      input: { main: 'index.html', phone: 'phone.html', polymarket: 'polymarket.html' },
       output: {
         manualChunks(id) {
           if (id.includes('lightweight-charts') || id.includes('fancy-canvas')) return 'chart-engine'

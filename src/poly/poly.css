@@ -1,0 +1,253 @@
+/* polymarket.html: the phone page's look (phone.css), with the Polymarket rounds' own pieces. */
+
+.poly-tabs button {
+  flex: 1;
+}
+.poly-trade {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 0;
+}
+.is-up {
+  color: var(--phone-up);
+}
+.is-down {
+  color: var(--phone-down);
+}
+
+/* The round: the clock, the price to beat and BTC now. */
+.poly-round {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+.poly-round-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.poly-clock {
+  font-size: 30px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.poly-clock.is-late {
+  color: #f0b429;
+}
+.poly-round-prices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.poly-round-prices > div {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+.poly-round-prices b {
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.poly-round-prices small {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The amount: $5 / $15 / $30, or another. */
+.poly-amounts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr) 1.4fr;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--phone-card);
+}
+.poly-amounts button,
+.poly-custom {
+  padding: 9px 0;
+  border-radius: 8px;
+  color: var(--phone-muted);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+}
+.poly-amounts button.on,
+.poly-custom.on {
+  background: #2a313c;
+  color: var(--phone-text);
+}
+.poly-custom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.poly-custom input {
+  width: 100%;
+  min-width: 0;
+  max-width: 64px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  /* 16px at least, or Safari zooms in on focus. */
+  font-size: 16px;
+  outline: none;
+}
+
+/* Buy Up / Buy Down. */
+.poly-buys {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.poly-buy {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 14px 8px;
+  border: 1px solid;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.poly-buy b {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+.poly-buy small {
+  font-weight: 400;
+  opacity: 0.8;
+}
+.poly-buy.is-up {
+  border-color: rgba(43, 185, 155, 0.6);
+  background: rgba(43, 185, 155, 0.14);
+  color: var(--phone-up);
+}
+.poly-buy.is-down {
+  border-color: rgba(237, 103, 115, 0.6);
+  background: rgba(237, 103, 115, 0.14);
+  color: var(--phone-down);
+}
+.poly-buy:active:not(:disabled) {
+  filter: brightness(1.35);
+}
+.poly-buy:disabled {
+  opacity: 0.45;
+}
+.poly-buy-pays {
+  font-size: 11px;
+}
+.poly-status {
+  margin: 0;
+  font-size: 13px;
+  text-align: center;
+}
+.poly-status.is-ok {
+  color: var(--phone-up);
+}
+.poly-status.is-error {
+  color: var(--phone-down);
+}
+
+/* Auto-sell: the top profit less this %. */
+.poly-auto {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.poly-auto > div:first-child {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+.poly-auto b {
+  font-size: 14px;
+}
+.poly-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.poly-stepper span {
+  min-width: 36px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.poly-stepper button {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--phone-line);
+  border-radius: 8px;
+  color: var(--phone-text);
+}
+.poly-stepper button.on {
+  border-color: rgba(43, 185, 155, 0.6);
+  color: var(--phone-up);
+}
+.poly-stepper button:disabled {
+  opacity: 0.45;
+}
+
+/* What is held in the running round. */
+.poly-holding {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-left-width: 3px;
+}
+.poly-holding.is-up {
+  border-left-color: var(--phone-up);
+}
+.poly-holding.is-down {
+  border-left-color: var(--phone-down);
+}
+.poly-holding-head,
+.poly-holding-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.poly-holding-head b {
+  font-size: 15px;
+}
+.poly-sell {
+  width: 100%;
+  margin-top: 4px;
+}
+.poly-settling {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.poly-settling > div {
+  display: flex;
+  justify-content: space-between;
+}
+
+/* The Plays tab's numbers, three to a row. */
+.poly-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.poly-stat {
+  display: grid;
+  gap: 2px;
+  padding: 10px;
+  font-size: 11px;
+}
+.poly-stat b {
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

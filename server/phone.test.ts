@@ -344,9 +344,10 @@ describe('the gate in front of the app', () => {
 })
 
 describe('the phone gate and the trade routes', () => {
-  it('lets through every change a phone may send to the trade API, and no other', () => {
+  it('lets through every change a phone may send to the trade and Polymarket APIs, and no other', () => {
     const reads = new Set(['state', 'stream', 'history'])
     const writes = [...PHONE_ROUTES].filter((route) => !reads.has(route)).map((route) => `/api/trade/${route}`)
-    expect([...PHONE_WRITES].sort()).toEqual(writes.sort())
+    const poly = ['buy', 'sell-now', 'auto-sell'].map((route) => `/api/poly/${route}`)
+    expect([...PHONE_WRITES].sort()).toEqual([...writes, ...poly].sort())
   })
 })

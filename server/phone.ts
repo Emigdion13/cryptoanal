@@ -554,7 +554,8 @@ export async function readJson(req: IncomingMessage): Promise<Record<string, unk
   }
 }
 
-/** The only changes a signed-in phone may send: the quick-trade circles' orders (server/trade/api.ts). */
+/** The only changes a signed-in phone may send: the quick-trade circles' orders (server/trade/api.ts)
+ * and the Polymarket page's real orders (server/polyUs.ts). */
 export const PHONE_WRITES = new Set([
   '/api/trade/buy',
   '/api/trade/sell-now',
@@ -563,6 +564,9 @@ export const PHONE_WRITES = new Set([
   '/api/trade/auto-sell',
   '/api/trade/arm',
   '/api/trade/disarm',
+  '/api/poly/buy',
+  '/api/poly/sell-now',
+  '/api/poly/auto-sell',
 ])
 
 /**
