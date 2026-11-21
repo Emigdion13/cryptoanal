@@ -5,6 +5,7 @@ import { kalshiStrike } from './kalshiStrike'
 import { polymarketStrike } from './polymarketStrike'
 import { tuxEmaScalper } from './tuxDef'
 import { luxSrBreaks } from './luxSr'
+import { robexSrZones } from './robexSr'
 import { bayesianNqqe } from './v2/bayesianDef'
 import { atrCall, bbwCall, cmfCall, dmiCall, obvCall } from './calls'
 import { cmUltMacd, cmVixFix, msbZigZag, rsiDivergence, smartMoneyConcepts, tmoLux, tmoScalper, trendPressure, withDivergences } from './v2/defs'
@@ -636,6 +637,7 @@ export const INDICATORS: IndicatorDef[] = [
   polymarketStrike,
   tuxEmaScalper,
   luxSrBreaks,
+  robexSrZones,
   bayesianNqqe,
 ]
 

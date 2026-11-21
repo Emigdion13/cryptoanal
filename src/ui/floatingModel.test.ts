@@ -29,7 +29,7 @@ describe('floating windows', () => {
   it('only for indicators in a pane of their own, never overlays', () => {
     const floating = INDICATORS.filter(canFloat).map((d) => d.type)
     expect(floating).toEqual(expect.arrayContaining(['rsi', 'macd', 'stoch', 'stochRsi', 'cmUltMacd', 'tmoScalper', 'tmoLux']))
-    for (const type of ['tuxEmaScalper', 'luxSrBreaks', 'smartMoneyConcepts', 'msbZigZag', 'kalshiStrike', 'ema', 'bb', 'volume'])
+    for (const type of ['tuxEmaScalper', 'luxSrBreaks', 'robexSrZones', 'smartMoneyConcepts', 'msbZigZag', 'kalshiStrike', 'ema', 'bb', 'volume'])
       expect(floating, type).not.toContain(type)
   })
 

@@ -70,7 +70,7 @@ export class DrawingPrimitive implements IPanePrimitive<Time>, ISeriesPrimitive<
     for (const d of this.drawings) {
       if (d.type === 'line' || d.type === 'box') {
         const x2 = d.x2 === 'end' ? this.last : d.x2
-        if (!inView(Math.min(d.x1, x2), d.type === 'line' && d.extendRight ? Infinity : Math.max(d.x1, x2))) continue
+        if (!inView(Math.min(d.x1, x2), d.extendRight ? Infinity : Math.max(d.x1, x2))) continue
         if (d.type === 'line') take(d.y1), take(d.y2)
         else take(d.top), take(d.bottom)
       } else if (d.type === 'text') {
@@ -140,9 +140,9 @@ export class DrawingPrimitive implements IPanePrimitive<Time>, ISeriesPrimitive<
         for (const d of this.drawings) {
           if (d.type !== 'box') continue
           const x2i = d.x2 === 'end' ? this.last : d.x2
-          if (!this.visible(Math.min(d.x1, x2i), Math.max(d.x1, x2i))) continue
+          if (!this.visible(Math.min(d.x1, x2i), d.extendRight ? Infinity : Math.max(d.x1, x2i))) continue
           const x1 = this.x(d.x1),
-            x2 = this.x(d.x2),
+            x2 = d.extendRight ? (this.chart?.timeScale().width() ?? null) : this.x(d.x2),
             y1 = this.y(d.top),
             y2 = this.y(d.bottom)
           if (x1 === null || x2 === null || y1 === null || y2 === null) continue
