@@ -26,10 +26,14 @@ import type { ChartWindowActions } from './ui/ChartWindow'
 import { newChartWindow } from './ui/chartWindows'
 import { PhoneAccessDialog } from './ui/PhoneAccessDialog'
 import { KalshiTradingDialog } from './ui/KalshiTradingDialog'
+import { PolyUsTradingDialog } from './ui/PolyUsTradingDialog'
 import { LeftToolbar, RightToolbar } from './ui/Sidebars'
 import { SymbolSearch } from './ui/SymbolSearch'
 import { useWorkspace } from './ui/useWorkspace'
 import { Watchlist } from './ui/Watchlist'
+import { ForcedFlowBox } from './ui/ForcedFlowBox'
+import { forcedFlowProduct } from './ui/forcedFlowRules'
+import type { ForcedFlowWindow } from './ui/settings'
 
 type SearchState = {
   initial: string
@@ -78,6 +82,7 @@ export function App() {
   const [indicatorsFor, setIndicatorsFor] = useState<IndicatorTarget | null>(null)
   const [phoneOpen, setPhoneOpen] = useState(false)
   const [tradingOpen, setTradingOpen] = useState(false)
+  const [polyTradingOpen, setPolyTradingOpen] = useState(false)
   const [editing, setEditing] = useState<(IndicatorTarget & { id: string }) | null>(null)
 
   // Drawings: the tool the next clicks place, the drawing selected on one of the charts, and undo.
@@ -238,6 +243,10 @@ export function App() {
       list.map((x) => (canFloat(INDICATOR_BY_TYPE.get(x.type)) ? { ...x, floating: { ...x.floating, open } } : x)),
     )
 
+  // Floating → Forced flow (Alt+F): one window for the active chart's market, saved with the workspace.
+  const forcedFlow = settings.forcedFlow ?? { open: false }
+  const setForcedFlow = (patch: Partial<ForcedFlowWindow>) => update((s) => ({ forcedFlow: { open: false, ...s.forcedFlow, ...patch } }))
+
   const pickLayout = (id: string) =>
     update((s) => {
       const n = (LAYOUT_BY_ID.get(id) ?? LAYOUTS[0]).cells.length
@@ -345,6 +354,10 @@ export function App() {
         const n = Number(e.code.slice(5))
         if (n === 0) setAllFloating(!floatables.some((i) => i.floating?.open))
         else if (floatables[n - 1]) toggleFloating(floatables[n - 1].id)
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyF') {
+        // Alt+F: the Forced flow window.
+        e.preventDefault()
+        setForcedFlow({ open: !forcedFlow.open })
       } else if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyW') {
         // Alt+W: a new chart window over the active chart.
         e.preventDefault()
@@ -400,6 +413,8 @@ export function App() {
           }))}
           onFloat={toggleFloating}
           onFloatAll={setAllFloating}
+          forcedFlow={forcedFlow.open}
+          onForcedFlow={() => setForcedFlow({ open: !forcedFlow.open })}
           windows={activeWindows.map((w) => ({
             id: w.id,
             title: `${getProduct(catalog, w.symbol ?? chart.symbol).ticker} · ${intervalName(w.interval)}`,
@@ -416,6 +431,7 @@ export function App() {
           onScaleFit={(scaleFit) => update({ scaleFit })}
           onPhoneAccess={() => setPhoneOpen(true)}
           onKalshiTrading={() => setTradingOpen(true)}
+          onPolyTrading={() => setPolyTradingOpen(true)}
           saveControls={<LayoutControls ws={ws} />}
         />
         <LeftToolbar
@@ -517,6 +533,9 @@ export function App() {
           watchlistOpen={settings.watchlistOpen}
           onWatchlist={() => update({ watchlistOpen: !settings.watchlistOpen })}
         />
+        {forcedFlow.open && (
+          <ForcedFlowBox product={forcedFlowProduct(product)} ticker={product.ticker} state={forcedFlow} onChange={setForcedFlow} />
+        )}
         {saveProblem && <div className="save-toast">{saveProblem}</div>}
         {search && (
           <SymbolSearch
@@ -557,6 +576,7 @@ export function App() {
         )}
         {phoneOpen && <PhoneAccessDialog onClose={() => setPhoneOpen(false)} />}
         {tradingOpen && <KalshiTradingDialog onClose={() => setTradingOpen(false)} />}
+        {polyTradingOpen && <PolyUsTradingDialog onClose={() => setPolyTradingOpen(false)} />}
       </div>
     </DrawingsContext.Provider>
   )

@@ -99,6 +99,22 @@ export interface Settings {
   /** The drawings on each symbol, shown on every chart of it at every interval. */
   drawings: Record<string, UserDrawing[]>
   drawingPrefs: DrawingPrefs
+  /** The Forced flow window (Floating → Forced flow): liquidations and open interest behind the move. */
+  forcedFlow?: ForcedFlowWindow
+}
+
+/** The Forced flow window, as saved with the workspace. */
+export interface ForcedFlowWindow {
+  open: boolean
+  /** Where it was dragged to, from the window's top-left; bottom right of the charts until then. */
+  x?: number
+  y?: number
+  /** 0 (solid) to 100 (gone), in steps of 5. */
+  transparency?: number
+  /** Faded, it shows itself while liquidations or a big move are happening. On unless turned off. */
+  wake?: boolean
+  /** A chime for each new long or short squeeze. */
+  alerts?: boolean
 }
 
 export function newChart(from?: Partial<ChartState>): ChartState {

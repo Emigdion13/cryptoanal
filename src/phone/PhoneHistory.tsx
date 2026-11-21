@@ -130,7 +130,7 @@ export function PhoneHistory({ active, trade, onCharts }: { active: boolean; tra
 }
 
 /** The running total after each round, oldest to newest, with a zero line. */
-function Curve({ points, tone }: { points: { time: number; pnl: number }[]; tone: string }) {
+export function Curve({ points, tone }: { points: { time: number; pnl: number }[]; tone: string }) {
   const width = 340
   const height = 70
   const values = points.map((p) => p.pnl)

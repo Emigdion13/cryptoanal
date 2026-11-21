@@ -56,11 +56,16 @@ interface Props {
   onPhoneAccess: () => void
   /** ⚙ → Kalshi trading: the phone's trading keys and the real-money switch. */
   onKalshiTrading: () => void
+  /** ⚙ → Polymarket US trading: the Polymarket page's key and real-money switch. */
+  onPolyTrading: () => void
   onIndicators: () => void
   /** The active chart's oscillators, for the Floating menu. */
   floating: { id: string; title: string; open: boolean }[]
   onFloat: (id: string) => void
   onFloatAll: (open: boolean) => void
+  /** Floating → Forced flow: the liquidations and open interest window. */
+  forcedFlow: boolean
+  onForcedFlow: () => void
   /** The active chart's floating chart windows: "BTCUSD · 1h". */
   windows: { id: string; title: string }[]
   onNewWindow: () => void
@@ -118,6 +123,8 @@ export function Header(props: Props) {
         items={props.floating}
         onToggle={props.onFloat}
         onAll={props.onFloatAll}
+        forcedFlow={props.forcedFlow}
+        onForcedFlow={props.onForcedFlow}
         windows={props.windows}
         onNewWindow={props.onNewWindow}
         onCloseWindow={props.onCloseWindow}
@@ -135,6 +142,7 @@ export function Header(props: Props) {
         onScaleFit={props.onScaleFit}
         onPhoneAccess={props.onPhoneAccess}
         onKalshiTrading={props.onKalshiTrading}
+        onPolyTrading={props.onPolyTrading}
       />
       <button className="tb-btn icon" onClick={props.onFullscreen} title="Fullscreen mode">
         <FullscreenIcon />
@@ -258,6 +266,8 @@ function FloatingMenu(props: {
   items: { id: string; title: string; open: boolean }[]
   onToggle: (id: string) => void
   onAll: (open: boolean) => void
+  forcedFlow: boolean
+  onForcedFlow: () => void
   windows: { id: string; title: string }[]
   onNewWindow: () => void
   onCloseWindow: (id: string) => void
@@ -266,7 +276,7 @@ function FloatingMenu(props: {
   const ref = useRef<HTMLDivElement>(null)
   const close = useCallback(() => setOpen(false), [])
   useDismiss(ref, open, close)
-  const count = props.items.filter((i) => i.open).length + props.windows.length
+  const count = props.items.filter((i) => i.open).length + props.windows.length + (props.forcedFlow ? 1 : 0)
   const openCards = props.items.filter((i) => i.open).length
 
   return (
@@ -300,6 +310,12 @@ function FloatingMenu(props: {
               <span className="menu-shortcut">Alt+0</span>
             </div>
           )}
+          <div className="menu-heading">MARKET WINDOWS</div>
+          <div className="menu-item with-icon" onClick={props.onForcedFlow} title="Liquidations and open interest on the perpetual futures behind the move">
+            <span className="menu-check">{props.forcedFlow && <CheckIcon />}</span>
+            <span className="menu-label">Forced flow</span>
+            <span className="menu-shortcut">Alt+F</span>
+          </div>
           <div className="menu-heading">CHART WINDOWS</div>
           {props.windows.map((w) => (
             <div key={w.id} className="menu-item with-icon">
@@ -352,6 +368,7 @@ function StatusLineMenu({
   onScaleFit,
   onPhoneAccess,
   onKalshiTrading,
+  onPolyTrading,
 }: {
   value: StatusLine
   onChange: (v: StatusLine) => void
@@ -359,6 +376,7 @@ function StatusLineMenu({
   onScaleFit: (v: ScaleFit) => void
   onPhoneAccess: () => void
   onKalshiTrading: () => void
+  onPolyTrading: () => void
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -420,6 +438,15 @@ function StatusLineMenu({
             }}
           >
             <span className="menu-label">Kalshi trading…</span>
+          </div>
+          <div
+            className="menu-item"
+            onClick={() => {
+              setOpen(false)
+              onPolyTrading()
+            }}
+          >
+            <span className="menu-label">Polymarket US trading…</span>
           </div>
         </div>
       )}

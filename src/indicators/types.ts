@@ -80,6 +80,8 @@ export type Drawing =
       bottom: number
       fill: string
       border?: string
+      /** Runs on to the price axis, past the newest bar. */
+      extendRight?: boolean
       text?: string
       textColor?: string
       textSize?: number
