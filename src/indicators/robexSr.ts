@@ -27,6 +27,7 @@ import { alpha } from '../drawings/tools'
 import { formatPrice } from '../format'
 import type { Candle } from '../data/types'
 import type { Drawing, IndicatorDef, InputValue } from './types'
+import { MAP_DEFAULTS, computeRobexMap } from './robexMap'
 
 export interface RobexSrSettings {
   pivotOrder: number
@@ -248,14 +249,30 @@ export function dayKeys(bars: readonly Bar[]): DayKey[] {
 /** The panel's colours: rgb(255, 69, 105) and rgb(0, 230, 118). */
 const RED = '#ff4569'
 const GREEN = '#00e676'
+/** The map's colours (adaptive_map.js): TradingView's teal and red. */
+const MAP_GREEN = '#26a69a'
+const MAP_RED = '#ef5350'
 const KEY = '#94a3b8'
 
 const TIMEFRAMES: Record<string, number | null> = { '15m': 900, '5m': 300, '1h': 3600, Chart: null }
 
 const num = (v: InputValue, min: number) => Math.max(min, Number(v) || 0)
 
+const isMap = (i: Record<string, InputValue>) => i.mode !== 'Panel'
+
 function sourceSeconds(i: Record<string, InputValue>, chartSeconds: number): number {
+  if (isMap(i)) return 900
   return TIMEFRAMES[String(i.timeframe)] ?? chartSeconds
+}
+
+/** Whole dollars for BTC-sized prices, as the panel prints them. */
+const digitsFor = (price: number) => (price >= 1000 ? 0 : price >= 1 ? 2 : 5)
+
+function dayKeyDrawings(source: readonly Bar[], digits: number): Drawing[] {
+  return dayKeys(source).flatMap((k): Drawing[] => [
+    { type: 'line', x1: 0, y1: k.price, x2: 'end', y2: k.price, color: alpha(KEY, 0.7), width: 1, dash: [2, 4], extendRight: true },
+    { type: 'text', x: 'end', y: k.price, text: `${k.name} ${formatPrice(k.price, digits)}`, color: '#cbd5e1', bg: 'rgba(11, 14, 21, 0.92)', size: 10, align: 'left', dx: 14, stack: true },
+  ])
 }
 
 export const robexSrZones: IndicatorDef = {
@@ -266,19 +283,33 @@ export const robexSrZones: IndicatorDef = {
   overlay: true,
   format: 'price',
   inputs: [
-    { key: 'timeframe', label: 'Candles', type: 'select', default: '15m', options: Object.keys(TIMEFRAMES) },
-    { key: 'window', label: 'Bars in the window', type: 'int', default: 300, min: 20, max: 5000 },
-    { key: 'pivotOrder', label: 'Pivot bars each side', type: 'int', default: 3, min: 1, max: 50 },
-    { key: 'perSide', label: 'Levels per side', type: 'int', default: 1, min: 1, max: 10 },
-    { key: 'atrPeriod', label: 'ATR length', type: 'int', default: 14, min: 1, max: 500, group: 'Levels', hideInTitle: true },
-    { key: 'mergeAtr', label: 'Merge pivots within (ATR)', type: 'float', default: 0.5, min: 0, max: 10, step: 0.05, group: 'Levels', hideInTitle: true },
-    { key: 'minThickAtr', label: 'Thinnest zone (ATR)', type: 'float', default: 0.12, min: 0, max: 10, step: 0.01, group: 'Levels', hideInTitle: true },
-    { key: 'maxThickAtr', label: 'Thickest zone (ATR)', type: 'float', default: 0.4, min: 0, max: 10, step: 0.01, group: 'Levels', hideInTitle: true },
-    { key: 'rangeBars', label: 'Range: last bars', type: 'int', default: 12, min: 3, max: 500, group: 'Range floor / ceiling', hideInTitle: true },
-    { key: 'rangeTolAtr', label: 'Range: same touch within (ATR)', type: 'float', default: 0.2, min: 0, max: 10, step: 0.05, group: 'Range floor / ceiling', hideInTitle: true },
-    { key: 'rangeMinTouches', label: 'Range: touches needed', type: 'int', default: 3, min: 2, max: 50, group: 'Range floor / ceiling', hideInTitle: true },
+    {
+      key: 'mode',
+      label: 'Levels',
+      type: 'select',
+      default: 'Map',
+      options: ['Map', 'Panel'],
+      optionLabels: { Map: "Map: the site's BTC zones (approximate)", Panel: 'Panel: sr_zones.js (exact)' },
+    },
+    { key: 'mapPerSide', label: 'Zones per side', type: 'int', default: MAP_DEFAULTS.perSide, min: 1, max: 10, group: 'Map', hideInTitle: true },
+    { key: 'mapMinTouches', label: 'Rejections needed', type: 'int', default: MAP_DEFAULTS.minTouches, min: 1, max: 50, group: 'Map', hideInTitle: true },
+    { key: 'mapPivotOrder', label: 'Pivot bars each side', type: 'int', default: MAP_DEFAULTS.pivotOrder, min: 1, max: 20, group: 'Map', hideInTitle: true },
+    { key: 'mapMergeAtr', label: 'Merge pivots within (ATR)', type: 'float', default: MAP_DEFAULTS.mergeAtr, min: 0, max: 10, step: 0.05, group: 'Map', hideInTitle: true },
+    { key: 'mapWindow', label: '15m bars', type: 'int', default: 96, min: 20, max: 5000, group: 'Map', hideInTitle: true },
+    { key: 'mapHourly', label: '1h zones beyond the 15m range', type: 'bool', default: true, group: 'Map', hideInTitle: true },
+    { key: 'timeframe', label: 'Candles', type: 'select', default: '15m', options: Object.keys(TIMEFRAMES), group: 'Panel', hideInTitle: true },
+    { key: 'window', label: 'Bars in the window', type: 'int', default: 300, min: 20, max: 5000, group: 'Panel', hideInTitle: true },
+    { key: 'pivotOrder', label: 'Pivot bars each side', type: 'int', default: 3, min: 1, max: 50, group: 'Panel', hideInTitle: true },
+    { key: 'perSide', label: 'Levels per side', type: 'int', default: 1, min: 1, max: 10, group: 'Panel', hideInTitle: true },
+    { key: 'atrPeriod', label: 'ATR length', type: 'int', default: 14, min: 1, max: 500, group: 'Panel', hideInTitle: true },
+    { key: 'mergeAtr', label: 'Merge pivots within (ATR)', type: 'float', default: 0.5, min: 0, max: 10, step: 0.05, group: 'Panel', hideInTitle: true },
+    { key: 'minThickAtr', label: 'Thinnest zone (ATR)', type: 'float', default: 0.12, min: 0, max: 10, step: 0.01, group: 'Panel', hideInTitle: true },
+    { key: 'maxThickAtr', label: 'Thickest zone (ATR)', type: 'float', default: 0.4, min: 0, max: 10, step: 0.01, group: 'Panel', hideInTitle: true },
+    { key: 'rangeBars', label: 'Range: last bars', type: 'int', default: 12, min: 3, max: 500, group: 'Panel', hideInTitle: true },
+    { key: 'rangeTolAtr', label: 'Range: same touch within (ATR)', type: 'float', default: 0.2, min: 0, max: 10, step: 0.05, group: 'Panel', hideInTitle: true },
+    { key: 'rangeMinTouches', label: 'Range: touches needed', type: 'int', default: 3, min: 2, max: 50, group: 'Panel', hideInTitle: true },
+    { key: 'showLine', label: 'Line at the exact level (Panel)', type: 'bool', default: false, group: 'Drawing' },
     { key: 'showTouches', label: 'Touches in the label', type: 'bool', default: true, group: 'Drawing' },
-    { key: 'showLine', label: 'Line at the exact level', type: 'bool', default: false, group: 'Drawing' },
     { key: 'showDayKeys', label: "Yesterday's and today's high / low (UTC)", type: 'bool', default: true, group: 'Drawing' },
   ],
   plots: [
@@ -286,13 +317,75 @@ export const robexSrZones: IndicatorDef = {
     { key: 'support', title: 'Support', kind: 'value', color: GREEN },
   ],
   feeds: (i, chart) => {
-    const seconds = sourceSeconds(i, chart.seconds)
-    return seconds === chart.seconds ? [] : [seconds]
+    const wanted = isMap(i) ? [900, ...(i.mapHourly !== false ? [3600] : [])] : [sourceSeconds(i, chart.seconds)]
+    return wanted.filter((s) => s !== chart.seconds)
   },
   compute: (bars, i, st, ctx) => {
     const seconds = sourceSeconds(i, ctx.interval.seconds)
-    const all = seconds === ctx.interval.seconds ? bars : ctx.feed(seconds)
-    const source = all.slice(-Math.round(num(i.window, 20)))
+    const feed = (s: number) => (s === ctx.interval.seconds ? bars : ctx.feed(s))
+    const drawings: Drawing[] = []
+    const values = { resistance: bars.map(() => NaN), support: bars.map(() => NaN) }
+
+    if (isMap(i)) {
+      const source = feed(900).slice(-Math.round(num(i.mapWindow, 20)))
+      const map = computeRobexMap(source, i.mapHourly !== false ? feed(3600).slice(-150) : [], {
+        perSide: Math.round(num(i.mapPerSide, 1)),
+        minTouches: Math.round(num(i.mapMinTouches, 1)),
+        pivotOrder: Math.round(num(i.mapPivotOrder, 1)),
+        mergeAtr: num(i.mapMergeAtr, 0),
+        hourly: i.mapHourly !== false,
+      })
+      const digits = digitsFor(map.price)
+      for (const { zone, tag, key, labelPrice } of map.shown) {
+        const style = st[zone.side]
+        if (style?.visible === false) continue
+        // PISO / TECHO take the colour of their role now (a broken ceiling that holds as a floor is green).
+        const support = tag === 'PISO' ? true : tag === 'TECHO' ? false : zone.side === 'support'
+        const color = support ? MAP_GREEN : MAP_RED
+        const x1 = Math.max(0, ctx.timeToIndex(zone.firstTime))
+        drawings.push({
+          type: 'box',
+          x1,
+          x2: 'end',
+          top: zone.high,
+          bottom: zone.low,
+          fill: alpha(color, key ? 0.34 : 0.14),
+          edges: alpha(color, 0.9),
+          minPx: key ? 10 : 8,
+          maxPx: 16,
+        })
+        drawings.push({
+          type: 'text',
+          x: 'end',
+          y: (zone.high + zone.low) / 2,
+          text: `${tag}  ${formatPrice(labelPrice, digits)}${i.showTouches ? ` · ${zone.touches}` : ''}`,
+          color: key ? '#ffffff' : color,
+          bg: key ? color : 'rgba(11, 14, 21, 0.92)',
+          size: 10,
+          align: 'left',
+          dx: 14,
+          // The page's labels push one another down rather than overlap.
+          stack: true,
+        })
+        const first = tag === 'S1' || tag === 'R1' || key
+        if (first && Number.isNaN(values[zone.side][bars.length - 1])) {
+          for (let k = Math.max(0, Math.ceil(x1)); k < bars.length; k++) values[zone.side][k] = zone.price
+        }
+      }
+      // A side with nothing drawn shows the nearest zone of any strength in the legend: the server
+      // lists those too (quality PROBADO), it only leaves them off the chart.
+      for (const side of ['support', 'resistance'] as const) {
+        if (!Number.isNaN(values[side][bars.length - 1])) continue
+        const near = map.zones
+          .filter((z) => z.side === side)
+          .sort((a, b) => Math.abs(a.price - map.price) - Math.abs(b.price - map.price))[0]
+        if (near) for (let k = Math.max(0, Math.ceil(ctx.timeToIndex(near.firstTime))); k < bars.length; k++) values[side][k] = near.price
+      }
+      if (i.showDayKeys) drawings.push(...dayKeyDrawings(source, digits))
+      return { values, drawings }
+    }
+
+    const source = feed(seconds).slice(-Math.round(num(i.window, 20)))
     const zones = computeRobexZones(source, {
       pivotOrder: Math.round(num(i.pivotOrder, 1)),
       atrPeriod: Math.round(num(i.atrPeriod, 1)),
@@ -304,11 +397,7 @@ export const robexSrZones: IndicatorDef = {
       rangeTolAtr: num(i.rangeTolAtr, 0),
       rangeMinTouches: Math.round(num(i.rangeMinTouches, 2)),
     })
-    // Whole dollars for BTC-sized prices, as the panel prints them.
-    const lastClose = source.length ? source[source.length - 1].close : 0
-    const digits = lastClose >= 1000 ? 0 : lastClose >= 1 ? 2 : 5
-    const drawings: Drawing[] = []
-    const values = { resistance: bars.map(() => NaN), support: bars.map(() => NaN) }
+    const digits = digitsFor(source.length ? source[source.length - 1].close : 0)
 
     for (const z of zones) {
       const style = st[z.kind]
@@ -331,6 +420,7 @@ export const robexSrZones: IndicatorDef = {
         weight: 700,
         align: 'left',
         dx: 14,
+        stack: true,
       })
       // The legend's value: the first level of its side, over the bars its zone spans.
       if (z.label.endsWith('1')) {
@@ -339,12 +429,7 @@ export const robexSrZones: IndicatorDef = {
       }
     }
 
-    if (i.showDayKeys) {
-      for (const k of dayKeys(source)) {
-        drawings.push({ type: 'line', x1: 0, y1: k.price, x2: 'end', y2: k.price, color: alpha(KEY, 0.7), width: 1, dash: [2, 4], extendRight: true })
-        drawings.push({ type: 'text', x: 'end', y: k.price, text: `${k.name} ${formatPrice(k.price, digits)}`, color: '#cbd5e1', bg: 'rgba(11, 14, 21, 0.92)', size: 10, align: 'left', dx: 14 })
-      }
-    }
+    if (i.showDayKeys) drawings.push(...dayKeyDrawings(source, digits))
     return { values, drawings }
   },
 }

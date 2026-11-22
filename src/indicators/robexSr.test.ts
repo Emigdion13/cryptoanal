@@ -89,10 +89,10 @@ describe('Robex S/R Zones: the rules', () => {
   })
 })
 
-describe('Robex S/R Zones: the indicator', () => {
+describe('Robex S/R Zones (Panel): the indicator', () => {
   const m15: IntervalDef = { id: '15', label: '15m', name: '15 minutes', group: 'minutes', kind: 'fixed', seconds: 900, intraday: true }
   const m1: IntervalDef = { ...m15, id: '1', label: '1m', name: '1 minute', seconds: 60 }
-  const inputs = Object.fromEntries(robexSrZones.inputs.map((i) => [i.key, i.default]))
+  const inputs = { ...Object.fromEntries(robexSrZones.inputs.map((i) => [i.key, i.default])), mode: 'Panel' }
   const ctx = (interval: IntervalDef, feed: (s: number) => Candle[] = () => []) => ({ interval, product: 'BTC-USD', feed, timeToIndex: () => 0 })
 
   it('reads 15m candles on another chart, its own bars on a 15m chart', () => {
