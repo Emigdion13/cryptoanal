@@ -261,6 +261,7 @@ const EDGE = 4
 export function ForcedFlowBox({
   product,
   ticker,
+  reading,
   state: saved,
   onChange,
 }: {
@@ -268,10 +269,12 @@ export function ForcedFlowBox({
   product: string | null
   /** The chart's ticker, for the "no perpetuals" note. */
   ticker: string
+  /** The reading from `useForcedFlow(product)`, shared with the charts' squeeze markers. */
+  reading: { flow: ForcedFlow | null; problem: string | null }
   state: ForcedFlowWindow
   onChange: (patch: Partial<ForcedFlowWindow>) => void
 }) {
-  const { flow, problem } = useForcedFlow(product)
+  const { flow, problem } = reading
   const [showInfo, setShowInfo] = useState(false)
   const transparency = forcedBoxTransparency(saved.transparency ?? 0)
   const wakeOn = saved.wake !== false

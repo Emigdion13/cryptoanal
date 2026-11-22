@@ -31,7 +31,7 @@ import { LeftToolbar, RightToolbar } from './ui/Sidebars'
 import { SymbolSearch } from './ui/SymbolSearch'
 import { useWorkspace } from './ui/useWorkspace'
 import { Watchlist } from './ui/Watchlist'
-import { ForcedFlowBox } from './ui/ForcedFlowBox'
+import { ForcedFlowBox, useForcedFlow } from './ui/ForcedFlowBox'
 import { forcedFlowProduct } from './ui/forcedFlowRules'
 import type { ForcedFlowWindow } from './ui/settings'
 
@@ -246,6 +246,9 @@ export function App() {
   // Floating → Forced flow (Alt+F): one window for the active chart's market, saved with the workspace.
   const forcedFlow = settings.forcedFlow ?? { open: false }
   const setForcedFlow = (patch: Partial<ForcedFlowWindow>) => update((s) => ({ forcedFlow: { open: false, ...s.forcedFlow, ...patch } }))
+  // Read only while the window is open; the same reading marks the squeezes on the charts of that coin.
+  const forcedProduct = forcedFlowProduct(product)
+  const forcedReading = useForcedFlow(forcedFlow.open ? forcedProduct : null)
 
   const pickLayout = (id: string) =>
     update((s) => {
@@ -504,6 +507,7 @@ export function App() {
                   onFloating={(id, patch) => setFloating(i, id, patch)}
                   favorites={settings.favorites}
                   windowActions={windowActions(i)}
+                  forcedFlow={forcedReading.flow}
                 />
               </div>
             ))}
@@ -534,7 +538,7 @@ export function App() {
           onWatchlist={() => update({ watchlistOpen: !settings.watchlistOpen })}
         />
         {forcedFlow.open && (
-          <ForcedFlowBox product={forcedFlowProduct(product)} ticker={product.ticker} state={forcedFlow} onChange={setForcedFlow} />
+          <ForcedFlowBox product={forcedProduct} ticker={product.ticker} reading={forcedReading} state={forcedFlow} onChange={setForcedFlow} />
         )}
         {saveProblem && <div className="save-toast">{saveProblem}</div>}
         {search && (

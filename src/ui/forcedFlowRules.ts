@@ -2,7 +2,7 @@
  * The Forced flow window's labels and rules (from btcAnalyzerV2), kept out of the component so they
  * test without a browser.
  */
-import { LIQUIDATION_BURST_USD, type ForcedFlow, type ForcedState } from '../data/forcedFlow'
+import { LIQUIDATION_BURST_USD, type ForcedEvent, type ForcedFlow, type ForcedState } from '../data/forcedFlow'
 
 /**
  * The transparency bar's value as a whole percent, 0 (solid) to 100 (gone), in steps of 5. The
@@ -119,3 +119,10 @@ export function newSqueezes(flow: ForcedFlow | null, seen: Set<string>): string[
   if (!flow) return []
   return flow.events.filter((e) => !e.history && !seen.has(e.id)).map((e) => e.id)
 }
+
+/** The squeezes to mark on a chart of `product`: replayed history first, so live ones win a shared bar. */
+export function forcedEventsFor(flow: ForcedFlow | null | undefined, product: { base: string; quote: string }): ForcedEvent[] {
+  if (!flow || forcedFlowProduct(product) !== flow.product) return NO_EVENTS
+  return [...(flow.history ?? []), ...flow.events]
+}
+const NO_EVENTS: ForcedEvent[] = []

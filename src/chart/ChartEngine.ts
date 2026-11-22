@@ -31,6 +31,8 @@ import type { DrawingPrefs, UserDrawing } from '../drawings/types'
 import { theme } from '../theme'
 import { FillPrimitive, type Fill } from './FillPrimitive'
 import { heikinAshi, nextHeikinAshi } from './heikinAshi'
+import { ForcedFlowMarkers, forcedMarkerTitle } from './ForcedFlowMarkers'
+import type { ForcedEvent } from '../data/forcedFlow'
 
 export type ChartType =
   | 'bars'
@@ -190,6 +192,9 @@ export class ChartEngine {
   private raf = 0
   private cleanup: (() => void)[] = []
   private drawingLayer: DrawingLayer
+  /** Forced-flow squeeze markers (LIQ) on the price pane. */
+  private forcedMarkers: ForcedFlowMarkers
+  private forcedTitle = false
 
   private instances: IndicatorInstance[] = []
   private runtimes: Runtime[] = []
@@ -278,6 +283,7 @@ export class ChartEngine {
         select: (d) => this.emit('drawingSelect', d),
       },
     )
+    this.forcedMarkers = new ForcedFlowMarkers({ bars: () => this.source(), barSeconds: () => this.def?.seconds ?? 60 })
     this.createMain()
 
     this.priceLabel = this.makeLabel()
@@ -379,6 +385,11 @@ export class ChartEngine {
 
   getBars(): readonly Candle[] {
     return this.bars
+  }
+
+  /** Forced-flow squeezes to mark on the bars they began in (empty hides the markers). */
+  setForcedEvents(events: ForcedEvent[]) {
+    this.forcedMarkers.setEvents(events)
   }
 
   // ── indicators ──────────────────────────────────────────────────────────
@@ -1106,6 +1117,7 @@ export class ChartEngine {
         })
     }
     this.main.attachPrimitive(this.drawingLayer)
+    this.main.attachPrimitive(this.forcedMarkers)
     this.labelKey = ''
     this.applyScaleFit()
   }
@@ -1161,6 +1173,15 @@ export class ChartEngine {
   }
 
   private onCrosshair = (param: MouseEventParams<Time>) => {
+    // A squeeze marker under the mouse says what it was in the host's tooltip.
+    const squeeze = this.forcedMarkers.eventFor(param.hoveredObjectId)
+    if (squeeze) {
+      this.host.title = forcedMarkerTitle(squeeze)
+      this.forcedTitle = true
+    } else if (this.forcedTitle) {
+      this.host.removeAttribute('title')
+      this.forcedTitle = false
+    }
     this.crosshairY = param.point && param.paneIndex === 0 ? param.point.y : null
     if (!this.syncing) {
       if (param.sourceEvent) this.showHorzLine(true)

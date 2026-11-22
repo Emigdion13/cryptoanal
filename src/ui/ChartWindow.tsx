@@ -14,6 +14,8 @@ import { CoinLogo, useDismiss } from './common'
 import { ChevronDown, CloseIcon, FxIcon, RealtimeIcon } from './icons'
 import { IndicatorRow, MainLegend } from './Legend'
 import type { ChartWindowState, ScaleFit, StatusLine } from './settings'
+import type { ForcedFlow } from '../data/forcedFlow'
+import { forcedEventsFor } from './forcedFlowRules'
 
 /** How close to the chart's edge a window may sit. */
 const EDGE = 4
@@ -52,6 +54,8 @@ interface Props {
   front: boolean
   onFront: () => void
   actions: ChartWindowActions
+  /** The Forced flow window's reading: its squeezes are marked here too when this window shows that coin. */
+  forcedFlow?: ForcedFlow | null
 }
 
 /**
@@ -230,6 +234,7 @@ export function ChartWindow(props: Props) {
             scaleFit={scaleFit}
             interval={interval}
             actions={actions}
+            forcedFlow={props.forcedFlow}
           />
           {RESIZE_EDGES.map((edge) => (
             <div key={edge} className={`cw-edge is-${edge}`} onPointerDown={(e) => startResize(e, edge)} />
@@ -253,6 +258,7 @@ function WindowChart({
   scaleFit,
   interval,
   actions,
+  forcedFlow,
 }: Omit<Props, 'favorites' | 'dockIndex' | 'front' | 'onFront'> & { interval: ReturnType<typeof parseInterval> }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [engine, setEngine] = useState<ChartEngine | null>(null)
@@ -285,6 +291,8 @@ function WindowChart({
   useEffect(() => engine?.setProduct(product.id), [engine, product.id])
   useEffect(() => engine?.setPaneSizes(win.paneSizes), [engine, win.paneSizes])
   useEffect(() => engine?.setIndicators(win.indicators), [engine, win.indicators])
+  const forcedEvents = useMemo(() => forcedEventsFor(forcedFlow, product), [forcedFlow, product.base, product.quote])
+  useEffect(() => engine?.setForcedEvents(forcedEvents), [engine, forcedEvents])
   useDrawings(engine, product.id)
   const usesKalshi = win.indicators.some((i) => i.type === 'kalshiStrike' && !i.hidden)
   useEffect(() => {
