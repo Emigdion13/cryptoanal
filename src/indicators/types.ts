@@ -82,6 +82,11 @@ export type Drawing =
       border?: string
       /** Runs on to the price axis, past the newest bar. */
       extendRight?: boolean
+      /** Height in pixels kept between these, centred on the zone (a band that stays legible at any zoom). */
+      minPx?: number
+      maxPx?: number
+      /** Lines along the top and bottom edges only (unlike `border`, no sides). */
+      edges?: string
       text?: string
       textColor?: string
       textSize?: number
@@ -102,6 +107,8 @@ export type Drawing =
       dx?: number
       /** A filled label behind the text (a badge). */
       bg?: string
+      /** Labels with `stack` never overlap: from the top down, each is pushed below the one above it. */
+      stack?: boolean
     }
   | { type: 'triangle'; x: number; y: number; dir: 'up' | 'down'; color: string; size: number }
   | {

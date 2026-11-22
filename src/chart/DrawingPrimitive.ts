@@ -146,12 +146,22 @@ export class DrawingPrimitive implements IPanePrimitive<Time>, ISeriesPrimitive<
             y1 = this.y(d.top),
             y2 = this.y(d.bottom)
           if (x1 === null || x2 === null || y1 === null || y2 === null) continue
-          const left = Math.min(x1, x2),
-            top = Math.min(y1, y2)
-          const width = Math.max(2, Math.abs(x2 - x1)),
-            height = Math.max(1, Math.abs(y2 - y1))
+          const left = Math.min(x1, x2)
+          let top = Math.min(y1, y2)
+          const width = Math.max(2, Math.abs(x2 - x1))
+          let height = Math.max(1, Math.abs(y2 - y1))
+          if (d.minPx !== undefined || d.maxPx !== undefined) {
+            const kept = Math.min(d.maxPx ?? Infinity, Math.max(d.minPx ?? 0, height))
+            top += (height - kept) / 2
+            height = kept
+          }
           ctx.fillStyle = d.fill
           ctx.fillRect(left, top, width, height)
+          if (d.edges) {
+            ctx.fillStyle = d.edges
+            ctx.fillRect(left, Math.round(top), width, 1)
+            ctx.fillRect(left, Math.round(top + height) - 1, width, 1)
+          }
           if (d.border) {
             ctx.strokeStyle = d.border
             ctx.lineWidth = 1
@@ -175,9 +185,31 @@ export class DrawingPrimitive implements IPanePrimitive<Time>, ISeriesPrimitive<
     },
   }
 
+  /** Where stacked labels go: in price order from the top, each below the one above it. */
+  private stackedY(): Map<Drawing, number> {
+    const placed = new Map<Drawing, number>()
+    const labels: { d: Drawing & { type: 'text' }; y: number; h: number }[] = []
+    for (const d of this.drawings) {
+      if (d.type !== 'text' || !d.stack) continue
+      const xi = d.x === 'end' ? this.last : d.x
+      const y = this.y(d.y)
+      if (!this.visible(xi, xi) || y === null) continue
+      labels.push({ d, y: y + (d.dy ?? 0), h: (d.size ?? 10) + (d.bg ? 8 : 2) })
+    }
+    labels.sort((a, b) => a.y - b.y)
+    let bottom = -Infinity
+    for (const l of labels) {
+      const y = Math.max(l.y, bottom + l.h / 2 + 1)
+      placed.set(l.d, y)
+      bottom = y + l.h / 2
+    }
+    return placed
+  }
+
   private front: IPrimitivePaneRenderer = {
     draw: (target: CanvasRenderingTarget2D) => {
       target.useMediaCoordinateSpace(({ context: ctx }) => {
+        const stacked = this.stackedY()
         for (const d of this.drawings) {
           if (d.type === 'line') {
             const x2i = d.x2 === 'end' ? this.last : d.x2
@@ -203,7 +235,7 @@ export class DrawingPrimitive implements IPanePrimitive<Time>, ISeriesPrimitive<
             if (x === null || y === null) continue
             const size = d.size ?? 10
             let tx = x + (d.dx ?? 0)
-            const ty = y + (d.dy ?? 0)
+            const ty = stacked.get(d) ?? y + (d.dy ?? 0)
             ctx.font = `${d.weight ?? 600} ${size}px ${theme.font}`
             ctx.textAlign = d.align ?? 'center'
             ctx.textBaseline = 'middle'
