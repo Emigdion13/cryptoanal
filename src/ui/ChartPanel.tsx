@@ -14,6 +14,8 @@ import { feedGranularitiesFor, useChartData } from '../useChartData'
 import { RealtimeIcon } from './icons'
 import { IndicatorRow, MainLegend, type IndicatorActions } from './Legend'
 import type { ChartState, ScaleFit, StatusLine } from './settings'
+import type { ForcedFlow } from '../data/forcedFlow'
+import { forcedEventsFor } from './forcedFlowRules'
 
 export interface PanelHandle {
   showRange: (from: number, interval: string) => void
@@ -41,6 +43,8 @@ interface Props extends IndicatorActions {
   /** The toolbar's favorite intervals, for the chart windows' headers. */
   favorites: string[]
   windowActions: ChartWindowActions
+  /** The Forced flow window's reading (null while it is closed): its squeezes are marked on charts of that coin. */
+  forcedFlow?: ForcedFlow | null
 }
 
 /** One chart of the layout, with its own symbol, interval, data feed and legends. */
@@ -97,6 +101,8 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
   }, [engine, usesPolymarket, product.id])
   useEffect(() => engine?.setPaneSizes(state.paneSizes), [engine, state.paneSizes])
   useEffect(() => engine?.setIndicators(state.indicators), [engine, state.indicators])
+  const forcedEvents = useMemo(() => forcedEventsFor(props.forcedFlow, product), [props.forcedFlow, product.base, product.quote])
+  useEffect(() => engine?.setForcedEvents(forcedEvents), [engine, forcedEvents])
   useDrawings(engine, product.id)
 
   // Coinbase granularities the indicators read besides the chart's own bars.
@@ -190,6 +196,7 @@ export const ChartPanel = forwardRef<PanelHandle, Props>(function ChartPanel(pro
             front={win.id === frontWindow}
             onFront={() => setFrontWindow(win.id)}
             actions={props.windowActions}
+            forcedFlow={props.forcedFlow}
           />
         ))}
       {status === 'error' && <div className="chart-toast">Can't reach Coinbase — retrying…</div>}
